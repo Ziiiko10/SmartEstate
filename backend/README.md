@@ -106,6 +106,7 @@ docker compose up --build
 - `DJANGO_DEBUG`
 - `DJANGO_ALLOWED_HOSTS`
 - `DJANGO_CORS_ALLOWED_ORIGINS`
+- `SMARTESTATE_PUBLIC_DEMO_ACCESS`: `True` permet d'utiliser l'application sans login
 - `SMARTESTATE_USE_MANAGED_SERVICES`
 - `DATABASE_FALLBACK_TO_SQLITE`
 - `DATABASE_SSL_REQUIRE`
@@ -135,12 +136,76 @@ Le endpoint retourne `200` si les services requis sont disponibles, `503` si Pos
 - `GET /api/organizations/`
 - `GET /api/team-memberships/`
 - `GET /api/assets/`
+- `GET /api/market-listings/`
 - `GET /api/portfolios/`
 - `GET /api/holdings/`
 - `GET /api/scenarios/`
 - `GET /api/valuations/`
 - `GET /api/recommendations/`
 - `GET /api/reports/`
+
+## ETL annonces Avito et Mubawab
+
+La commande `scrape_market_listings` extrait les annonces immobilieres depuis Avito et Mubawab, normalise les champs principaux, puis fait un upsert dans `MarketListing`.
+
+```powershell
+cd backend
+.\.venv\Scripts\python.exe manage.py migrate
+.\.venv\Scripts\python.exe manage.py scrape_market_listings --source all --pages 1 --limit 20 --sleep 1
+```
+
+Mode continu:
+
+```powershell
+.\.venv\Scripts\python.exe manage.py scrape_market_listings --source all --pages 1 --limit 40 --sleep 1 --interval 1800 --loop
+```
+
+Avec Docker, le service `market-etl` tourne en continu et relance le scraping selon `MARKET_ETL_INTERVAL_SECONDS`.
+
+Options utiles:
+
+- `--source avito|mubawab|all`
+- `--pages 2` pour parcourir plusieurs pages par source
+- `--limit 50` pour limiter le nombre d'annonces detaillees
+- `--city Casablanca` et `--transaction-type sale|rent|vacation` pour filtrer apres extraction
+- `--dry-run` pour tester sans ecriture en base
+- `--avito-url` et `--mubawab-url` pour remplacer les URLs de depart si les pages changent
+
+Les annonces importees sont consultables via `GET /api/market-listings/` avec les filtres `source`, `city`, `asset_type`, `transaction_type`, `min_price`, `max_price` et `q`.
+
+## Algorithmes ML baseline
+
+La couche `apps.intelligence.ml` fournit les algorithmes necessaires a la partie machine learning:
+
+- estimation par comparables ponderes (`weighted_comparable_knn`)
+- regression hedonique regularisee (`hedonic_ridge_regression`) entrainee sur les annonces importees
+- baseline par segment marche (`market_segment_baseline`)
+- moteur d'ensemble (`ml_ensemble_v1`) qui combine les modeles selon leur confiance
+- nettoyage robuste des valeurs extremes par IQR
+- estimation prix/m² ou loyer/m²
+- score d'opportunite investissement
+- simulation de scenario financier avec cashflow, valeur de sortie et IRR
+
+Endpoints:
+
+- `POST /api/ml/valuation/` estime une valeur de marche depuis les annonces importees et renvoie les modeles, la confiance, les comparables et les lignes d'entrainement
+- `POST /api/ml/investment-score/` calcule le score d'opportunite a partir du prix demande et des comparables
+- `POST /api/ml/scenario-simulation/` simule cashflow, dette, sortie et IRR
+
+Exemple:
+
+```json
+{
+  "city": "Casablanca",
+  "district": "Maarif",
+  "asset_type": "apartment",
+  "area_sqm": 100,
+  "bedrooms": 2,
+  "bathrooms": 1,
+  "asking_price": 950000,
+  "monthly_rent": 6500
+}
+```
 
 ## Donnees de demo
 

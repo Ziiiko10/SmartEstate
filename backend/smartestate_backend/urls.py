@@ -9,14 +9,17 @@ from rest_framework.views import APIView
 from apps.accounts.views import CurrentUserView, LoginView, RegisterView
 from apps.intelligence.views import (
     DashboardOverviewView,
+    InvestmentScoreView,
+    MarketValuationView,
     RecommendationViewSet,
     ReportViewSet,
     ScenarioViewSet,
+    ScenarioSimulationView,
     ValuationViewSet,
 )
 from apps.organizations.views import MembershipViewSet, OrganizationViewSet
 from apps.portfolios.views import PortfolioHoldingViewSet, PortfolioViewSet
-from apps.properties.views import PropertyAssetViewSet
+from apps.properties.views import MarketListingViewSet, PropertyAssetViewSet
 from smartestate_backend.health import check_cache, check_database, check_mongodb
 
 
@@ -58,6 +61,7 @@ router = DefaultRouter()
 router.register("organizations", OrganizationViewSet, basename="organization")
 router.register("team-memberships", MembershipViewSet, basename="team-membership")
 router.register("assets", PropertyAssetViewSet, basename="asset")
+router.register("market-listings", MarketListingViewSet, basename="market-listing")
 router.register("portfolios", PortfolioViewSet, basename="portfolio")
 router.register("holdings", PortfolioHoldingViewSet, basename="holding")
 router.register("scenarios", ScenarioViewSet, basename="scenario")
@@ -73,5 +77,8 @@ urlpatterns = [
     path("api/auth/login/", LoginView.as_view(), name="auth-login"),
     path("api/auth/me/", CurrentUserView.as_view(), name="auth-me"),
     path("api/dashboard/overview/", DashboardOverviewView.as_view(), name="dashboard-overview"),
+    path("api/ml/valuation/", MarketValuationView.as_view(), name="ml-valuation"),
+    path("api/ml/investment-score/", InvestmentScoreView.as_view(), name="ml-investment-score"),
+    path("api/ml/scenario-simulation/", ScenarioSimulationView.as_view(), name="ml-scenario-simulation"),
     path("api/", include(router.urls)),
 ]

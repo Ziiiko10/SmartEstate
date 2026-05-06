@@ -48,3 +48,70 @@ class PropertyAsset(TimestampedModel):
 
     def __str__(self) -> str:
         return self.name
+
+
+class MarketListing(TimestampedModel):
+    class Source(models.TextChoices):
+        AVITO = "avito", "Avito"
+        MUBAWAB = "mubawab", "Mubawab"
+
+    class AssetType(models.TextChoices):
+        APARTMENT = "apartment", "Appartement"
+        VILLA = "villa", "Villa"
+        OFFICE = "office", "Bureau"
+        RETAIL = "retail", "Retail"
+        LAND = "land", "Terrain"
+        HOSPITALITY = "hospitality", "Hospitality"
+        UNKNOWN = "unknown", "Inconnu"
+
+    class TransactionType(models.TextChoices):
+        SALE = "sale", "Vente"
+        RENT = "rent", "Location"
+        VACATION = "vacation", "Location courte duree"
+        UNKNOWN = "unknown", "Inconnu"
+
+    source = models.CharField(max_length=32, choices=Source.choices)
+    source_id = models.CharField(max_length=120, blank=True)
+    external_url = models.URLField(max_length=1000)
+    title = models.CharField(max_length=255)
+    description = models.TextField(blank=True)
+    asset_type = models.CharField(
+        max_length=32,
+        choices=AssetType.choices,
+        default=AssetType.UNKNOWN,
+    )
+    transaction_type = models.CharField(
+        max_length=32,
+        choices=TransactionType.choices,
+        default=TransactionType.UNKNOWN,
+    )
+    city = models.CharField(max_length=120, blank=True)
+    district = models.CharField(max_length=120, blank=True)
+    price = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
+    currency = models.CharField(max_length=8, default="MAD")
+    price_period = models.CharField(max_length=32, blank=True)
+    area_sqm = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    bedrooms = models.PositiveSmallIntegerField(null=True, blank=True)
+    bathrooms = models.PositiveSmallIntegerField(null=True, blank=True)
+    seller_name = models.CharField(max_length=255, blank=True)
+    published_label = models.CharField(max_length=120, blank=True)
+    scraped_at = models.DateTimeField()
+    last_seen_at = models.DateTimeField()
+    raw_payload = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        ordering = ["-last_seen_at", "source", "title"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["source", "external_url"],
+                name="uniq_market_listing_source_url",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["source", "last_seen_at"]),
+            models.Index(fields=["city", "district"]),
+            models.Index(fields=["asset_type", "transaction_type"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.get_source_display()} - {self.title}"

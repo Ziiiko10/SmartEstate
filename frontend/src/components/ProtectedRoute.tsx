@@ -1,6 +1,7 @@
 import type { PropsWithChildren } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
+import DashboardSidebar from "./DashboardSidebar";
 
 export default function ProtectedRoute({ children }: PropsWithChildren) {
   const { isAuthenticated, isBootstrapping } = useAuth();
@@ -21,5 +22,10 @@ export default function ProtectedRoute({ children }: PropsWithChildren) {
     return <Navigate replace state={{ from: location.pathname }} to="/connexion" />;
   }
 
-  return children;
+  return (
+    <div className="smartestate-dashboard-shell">
+      <DashboardSidebar />
+      <div className="smartestate-dashboard-content">{children}</div>
+    </div>
+  );
 }

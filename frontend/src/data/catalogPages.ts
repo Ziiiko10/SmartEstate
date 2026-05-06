@@ -8,7 +8,7 @@ export type CatalogPage = {
 
 export const catalogPages: CatalogPage[] = [
   {
-    title: "Page d'Accueil SmartEstate - Optimisee pour Figma",
+    title: "Page d'Accueil SmartEstate",
     path: "/",
     category: "Landing",
     description: "Page d'accueil produit avec hero, preuve sociale, sections d'explication et CTA.",

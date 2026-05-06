@@ -11,6 +11,7 @@ services:
       DJANGO_DEBUG: ${DJANGO_DEBUG:-True}
       DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-127.0.0.1,localhost,backend}
       DJANGO_CORS_ALLOWED_ORIGINS: ${DJANGO_CORS_ALLOWED_ORIGINS:-http://127.0.0.1:5173,http://localhost:5173}
+      SMARTESTATE_PUBLIC_DEMO_ACCESS: ${SMARTESTATE_PUBLIC_DEMO_ACCESS:-true}
       SMARTESTATE_USE_MANAGED_SERVICES: ${SMARTESTATE_USE_MANAGED_SERVICES:-false}
       DATABASE_FALLBACK_TO_SQLITE: ${DATABASE_FALLBACK_TO_SQLITE:-false}
       DATABASE_SSL_REQUIRE: ${DATABASE_SSL_REQUIRE:-false}
@@ -34,6 +35,48 @@ services:
       mongodb:
         condition: service_healthy
 
+  market-etl:
+    build:
+      context: ./backend
+    container_name: smartestate-market-etl
+    restart: unless-stopped
+    command: >
+      sh -c "python manage.py migrate &&
+      python manage.py scrape_market_listings
+      --source all
+      --pages ${MARKET_ETL_PAGES:-1}
+      --limit ${MARKET_ETL_LIMIT:-40}
+      --sleep ${MARKET_ETL_SLEEP_SECONDS:-1}
+      --interval ${MARKET_ETL_INTERVAL_SECONDS:-1800}
+      --loop"
+    working_dir: /app
+    environment:
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-smartestate-docker-dev-secret-key}
+      DJANGO_DEBUG: ${DJANGO_DEBUG:-True}
+      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-127.0.0.1,localhost,backend}
+      DJANGO_CORS_ALLOWED_ORIGINS: ${DJANGO_CORS_ALLOWED_ORIGINS:-http://127.0.0.1:5173,http://localhost:5173}
+      SMARTESTATE_PUBLIC_DEMO_ACCESS: ${SMARTESTATE_PUBLIC_DEMO_ACCESS:-true}
+      SMARTESTATE_USE_MANAGED_SERVICES: ${SMARTESTATE_USE_MANAGED_SERVICES:-false}
+      DATABASE_FALLBACK_TO_SQLITE: ${DATABASE_FALLBACK_TO_SQLITE:-false}
+      DATABASE_SSL_REQUIRE: ${DATABASE_SSL_REQUIRE:-false}
+      DATABASE_CONN_MAX_AGE: ${DATABASE_CONN_MAX_AGE:-600}
+      DATABASE_URL: ${DATABASE_URL:-postgres://smartestate:smartestate@postgres:5432/smartestate}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/1}
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/1}
+      MONGODB_URL: ${MONGODB_URL:-mongodb://mongodb:27017/smartestate}
+      MONGODB_TIMEOUT_MS: ${MONGODB_TIMEOUT_MS:-5000}
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+    volumes:
+      - ./backend:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+
   frontend:
     build:
       context: ./frontend
@@ -44,6 +87,7 @@ services:
     environment:
       VITE_APP_NAME: ${VITE_APP_NAME:-SmartEstate}
       VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://127.0.0.1:8000/api}
+      VITE_PUBLIC_DEMO_ACCESS: ${VITE_PUBLIC_DEMO_ACCESS:-true}
       CHOKIDAR_USEPOLLING: "true"
     ports:
       - "5173:5173"

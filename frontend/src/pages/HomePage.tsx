@@ -8,7 +8,7 @@ export default function HomePage() {
   return (
     <ImportedPageDocument
       bodyClassName="bg-background text-on-surface font-body selection:bg-secondary-container overflow-x-hidden"
-      title="Page d'Accueil SmartEstate - Optimisee pour Figma"
+      title="Page d'Accueil SmartEstate"
       styles={pageStyles}
     >
       <div>

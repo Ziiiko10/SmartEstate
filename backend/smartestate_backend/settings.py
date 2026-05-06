@@ -32,6 +32,7 @@ def env_bool(name: str, default: bool = False) -> bool:
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "django-insecure-smartestate-dev-key")
 DEBUG = env_bool("DJANGO_DEBUG", True)
 MANAGED_SERVICES = env_bool("SMARTESTATE_USE_MANAGED_SERVICES", False)
+PUBLIC_DEMO_ACCESS = env_bool("SMARTESTATE_PUBLIC_DEMO_ACCESS", True)
 
 allowed_hosts = os.getenv("DJANGO_ALLOWED_HOSTS", "127.0.0.1,localhost")
 ALLOWED_HOSTS = [host.strip() for host in allowed_hosts.split(",") if host.strip()]
@@ -205,7 +206,11 @@ REST_FRAMEWORK = {
         "rest_framework.authentication.SessionAuthentication",
     ],
     "DEFAULT_PERMISSION_CLASSES": [
-        "rest_framework.permissions.IsAuthenticated",
+        (
+            "rest_framework.permissions.AllowAny"
+            if PUBLIC_DEMO_ACCESS
+            else "rest_framework.permissions.IsAuthenticated"
+        ),
     ],
 }
 

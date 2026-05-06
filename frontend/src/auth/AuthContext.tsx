@@ -10,6 +10,7 @@ import { apiRequest } from "../lib/api";
 
 const LOCAL_STORAGE_TOKEN_KEY = "smartestate.auth.token";
 const SESSION_STORAGE_TOKEN_KEY = "smartestate.auth.session-token";
+const PUBLIC_DEMO_ACCESS = import.meta.env.VITE_PUBLIC_DEMO_ACCESS?.toLowerCase() !== "false";
 
 export type AuthUser = {
   created_at: string;
@@ -52,6 +53,16 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+const DEMO_USER: AuthUser = {
+  created_at: new Date(0).toISOString(),
+  email: "demo@smartestate.ma",
+  full_name: "SmartEstate Demo",
+  id: 0,
+  is_active: true,
+  phone_number: "",
+  role: "demo",
+};
+
 function getStoredToken() {
   return (
     window.localStorage.getItem(LOCAL_STORAGE_TOKEN_KEY) ??
@@ -89,6 +100,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
       if (!storedToken) {
         if (isMounted) {
+          setUser(PUBLIC_DEMO_ACCESS ? DEMO_USER : null);
           setIsBootstrapping(false);
         }
         return;
@@ -115,7 +127,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
         }
 
         startTransition(() => {
-          setUser(null);
+          setUser(PUBLIC_DEMO_ACCESS ? DEMO_USER : null);
           setToken(null);
         });
       } finally {
@@ -175,14 +187,14 @@ export function AuthProvider({ children }: PropsWithChildren) {
     clearStoredToken();
     startTransition(() => {
       setToken(null);
-      setUser(null);
+      setUser(PUBLIC_DEMO_ACCESS ? DEMO_USER : null);
     });
   }
 
   return (
     <AuthContext.Provider
       value={{
-        isAuthenticated: Boolean(token && user),
+        isAuthenticated: PUBLIC_DEMO_ACCESS || Boolean(token && user),
         isBootstrapping,
         login,
         logout,
