@@ -1,10 +1,13 @@
-import { startTransition, useDeferredValue, useEffect, useState } from "react";
+import { useDeferredValue, useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import ImportedPageDocument from "../components/ImportedPageDocument";
+import { CardGridSkeleton, MetricCardsSkeleton, SkeletonBlock } from "../components/LoadingState";
 import { useAuth } from "../auth/AuthContext";
 import { apiRequest, getErrorMessage } from "../lib/api";
 
 const pageStyles = `.material-symbols-outlined {
             font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
         }`;
 
 type MarketListing = {
@@ -22,6 +25,15 @@ type MarketListing = {
   source: string;
   title: string;
   transaction_type: string;
+};
+
+type PaginatedMarketListings = {
+  count: number;
+  next_page: number | null;
+  page: number;
+  page_size: number;
+  previous_page: number | null;
+  results: MarketListing[];
 };
 
 const ITEMS_PER_PAGE = 24;
@@ -45,8 +57,7 @@ function relativeDate(value: string) {
     return "";
   }
   const date = new Date(value);
-  const diffMs = Date.now() - date.getTime();
-  const diffHours = Math.max(1, Math.round(diffMs / 3600000));
+  const diffHours = Math.max(1, Math.round((Date.now() - date.getTime()) / 3600000));
   if (diffHours < 24) {
     return `Il y a ${diffHours} h`;
   }
@@ -93,14 +104,20 @@ function cityGradient(city: string) {
 export default function MarketListingsPage() {
   const { token } = useAuth();
   const [marketListings, setMarketListings] = useState<MarketListing[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
   const [query, setQuery] = useState("");
-  const [selectedCity, setSelectedCity] = useState("all");
+  const [cityQuery, setCityQuery] = useState("");
   const [selectedSource, setSelectedSource] = useState("all");
   const [selectedTransaction, setSelectedTransaction] = useState("all");
   const [page, setPage] = useState(1);
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(true);
-  const deferredQuery = useDeferredValue(query.trim().toLowerCase());
+  const deferredQuery = useDeferredValue(query.trim());
+  const deferredCity = useDeferredValue(cityQuery.trim());
+
+  useEffect(() => {
+    setPage(1);
+  }, [deferredCity, deferredQuery, selectedSource, selectedTransaction]);
 
   useEffect(() => {
     let active = true;
@@ -110,14 +127,34 @@ export default function MarketListingsPage() {
       setError("");
 
       try {
-        const listingData = await apiRequest<MarketListing[]>("/market-listings/", { token });
+        const params = new URLSearchParams({
+          page: String(page),
+          page_size: String(ITEMS_PER_PAGE),
+        });
+
+        if (selectedSource !== "all") {
+          params.set("source", selectedSource);
+        }
+        if (selectedTransaction !== "all") {
+          params.set("transaction_type", selectedTransaction);
+        }
+        if (deferredQuery) {
+          params.set("q", deferredQuery);
+        }
+        if (deferredCity) {
+          params.set("city", deferredCity);
+        }
+
+        const payload = await apiRequest<PaginatedMarketListings>(`/market-listings/?${params.toString()}`, {
+          token,
+        });
+
         if (!active) {
           return;
         }
 
-        startTransition(() => {
-          setMarketListings(listingData);
-        });
+        setMarketListings(payload.results);
+        setTotalCount(payload.count);
       } catch (requestError) {
         if (!active) {
           return;
@@ -134,45 +171,11 @@ export default function MarketListingsPage() {
     return () => {
       active = false;
     };
-  }, [token]);
+  }, [deferredCity, deferredQuery, page, selectedSource, selectedTransaction, token]);
 
-  useEffect(() => {
-    setPage(1);
-  }, [deferredQuery, selectedCity, selectedSource, selectedTransaction]);
-
-  const cities = Array.from(
-    new Set(
-      marketListings
-        .map((listing) => listing.city)
-        .filter((city) => city),
-    ),
-  ).sort((left, right) => left.localeCompare(right, "fr"));
-
-  const filteredListings = marketListings.filter((listing) => {
-    if (selectedCity !== "all" && listing.city !== selectedCity) {
-      return false;
-    }
-    if (selectedSource !== "all" && listing.source !== selectedSource) {
-      return false;
-    }
-    if (selectedTransaction !== "all" && listing.transaction_type !== selectedTransaction) {
-      return false;
-    }
-    if (!deferredQuery) {
-      return true;
-    }
-    return [listing.title, listing.city, listing.district, listing.source, transactionLabel(listing.transaction_type)]
-      .join(" ")
-      .toLowerCase()
-      .includes(deferredQuery);
-  });
-
-  const totalPages = Math.max(1, Math.ceil(filteredListings.length / ITEMS_PER_PAGE));
+  const totalPages = Math.max(1, Math.ceil(totalCount / ITEMS_PER_PAGE));
   const currentPage = Math.min(page, totalPages);
-  const visibleListings = filteredListings.slice(
-    (currentPage - 1) * ITEMS_PER_PAGE,
-    currentPage * ITEMS_PER_PAGE,
-  );
+  const isInitialLoading = isLoading && totalCount === 0 && marketListings.length === 0 && !error;
 
   return (
     <ImportedPageDocument
@@ -191,16 +194,17 @@ export default function MarketListingsPage() {
                 Toutes les annonces ETL
               </h1>
               <p className="mt-3 text-on-surface-variant text-sm md:text-base leading-relaxed">
-                Cette page affiche toutes les annonces récupérées par l'ETL Avito et Mubawab, avec leurs images, leurs prix et leurs métadonnées.
+                Cette page interroge maintenant le backend avec pagination et filtres serveur pour afficher les
+                annonces récupérées par l&apos;ETL Avito et Mubawab, avec leurs images et métadonnées.
               </p>
             </div>
-            <a
+            <Link
               className="inline-flex items-center gap-2 rounded-lg bg-primary px-5 py-3 text-sm font-bold text-white shadow-sm"
-              href="/portfolio-immobilier-maroc"
+              to="/portfolio-immobilier-maroc"
             >
               <span className="material-symbols-outlined text-base">arrow_back</span>
               Retour portfolio
-            </a>
+            </Link>
           </div>
         </section>
 
@@ -210,90 +214,111 @@ export default function MarketListingsPage() {
           </div>
         )}
 
-        <section className="grid grid-cols-1 lg:grid-cols-4 gap-6 mb-8">
-          <MetricCard label="Annonces chargées" value={String(marketListings.length)} />
-          <MetricCard label="Annonces filtrées" value={String(filteredListings.length)} />
-          <MetricCard
-            label="Sources actives"
-            value={String(new Set(marketListings.map((listing) => listing.source)).size)}
-          />
-          <MetricCard label="Villes couvertes" value={String(cities.length)} />
-        </section>
+        {isInitialLoading ? (
+          <section className="mb-8">
+            <MetricCardsSkeleton count={4} />
+          </section>
+        ) : (
+          <section className="grid grid-cols-1 lg:grid-cols-4 gap-6 mb-8">
+            <MetricCard label="Annonces filtrées" value={String(totalCount)} />
+            <MetricCard label="Page courante" value={`${currentPage} / ${totalPages}`} />
+            <MetricCard label="Sources actives" value={selectedSource === "all" ? "2" : "1"} />
+            <MetricCard label="Cartes chargées" value={String(marketListings.length)} />
+          </section>
+        )}
 
-        <section className="rounded-2xl bg-surface-container-lowest p-5 md:p-6 shadow-[0_12px_40px_rgba(26,28,29,0.06)] mb-8">
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-            <label className="block">
-              <span className="mb-2 block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Recherche</span>
-              <div className="relative">
-                <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-base">search</span>
+        {isInitialLoading ? (
+          <section className="rounded-2xl bg-surface-container-lowest p-5 md:p-6 shadow-[0_12px_40px_rgba(26,28,29,0.06)] mb-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+              <SkeletonBlock className="h-16 rounded-xl" />
+              <SkeletonBlock className="h-16 rounded-xl" />
+              <SkeletonBlock className="h-16 rounded-xl" />
+              <SkeletonBlock className="h-16 rounded-xl" />
+            </div>
+          </section>
+        ) : (
+          <section className="rounded-2xl bg-surface-container-lowest p-5 md:p-6 shadow-[0_12px_40px_rgba(26,28,29,0.06)] mb-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+              <label className="block">
+                <span className="mb-2 block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">
+                  Recherche
+                </span>
+                <div className="relative">
+                  <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-base">
+                    search
+                  </span>
+                  <input
+                    className="w-full rounded-lg border-none bg-surface-container-low py-3 pl-10 pr-4 text-sm focus:ring-2 focus:ring-secondary/20"
+                    onChange={(event) => setQuery(event.target.value)}
+                    placeholder="Titre, quartier, source..."
+                    type="text"
+                    value={query}
+                  />
+                </div>
+              </label>
+
+              <label className="block">
+                <span className="mb-2 block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">
+                  Ville
+                </span>
                 <input
-                  className="w-full rounded-lg border-none bg-surface-container-low py-3 pl-10 pr-4 text-sm focus:ring-2 focus:ring-secondary/20"
-                  onChange={(event) => setQuery(event.target.value)}
-                  placeholder="Titre, ville, source..."
+                  className="w-full rounded-lg border-none bg-surface-container-low px-4 py-3 text-sm focus:ring-2 focus:ring-secondary/20"
+                  onChange={(event) => setCityQuery(event.target.value)}
+                  placeholder="Casablanca, Marrakech..."
                   type="text"
-                  value={query}
+                  value={cityQuery}
                 />
-              </div>
-            </label>
+              </label>
 
-            <label className="block">
-              <span className="mb-2 block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Source</span>
-              <select
-                className="w-full rounded-lg border-none bg-surface-container-low py-3 px-4 text-sm focus:ring-2 focus:ring-secondary/20"
-                onChange={(event) => setSelectedSource(event.target.value)}
-                value={selectedSource}
-              >
-                <option value="all">Toutes</option>
-                <option value="avito">Avito</option>
-                <option value="mubawab">Mubawab</option>
-              </select>
-            </label>
+              <label className="block">
+                <span className="mb-2 block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">
+                  Source
+                </span>
+                <select
+                  className="w-full rounded-lg border-none bg-surface-container-low py-3 px-4 text-sm focus:ring-2 focus:ring-secondary/20"
+                  onChange={(event) => setSelectedSource(event.target.value)}
+                  value={selectedSource}
+                >
+                  <option value="all">Toutes</option>
+                  <option value="avito">Avito</option>
+                  <option value="mubawab">Mubawab</option>
+                </select>
+              </label>
 
-            <label className="block">
-              <span className="mb-2 block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Transaction</span>
-              <select
-                className="w-full rounded-lg border-none bg-surface-container-low py-3 px-4 text-sm focus:ring-2 focus:ring-secondary/20"
-                onChange={(event) => setSelectedTransaction(event.target.value)}
-                value={selectedTransaction}
-              >
-                <option value="all">Toutes</option>
-                <option value="sale">Vente</option>
-                <option value="rent">Location</option>
-                <option value="vacation">Saisonnier</option>
-                <option value="unknown">Non classée</option>
-              </select>
-            </label>
+              <label className="block">
+                <span className="mb-2 block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">
+                  Transaction
+                </span>
+                <select
+                  className="w-full rounded-lg border-none bg-surface-container-low py-3 px-4 text-sm focus:ring-2 focus:ring-secondary/20"
+                  onChange={(event) => setSelectedTransaction(event.target.value)}
+                  value={selectedTransaction}
+                >
+                  <option value="all">Toutes</option>
+                  <option value="sale">Vente</option>
+                  <option value="rent">Location</option>
+                  <option value="vacation">Saisonnier</option>
+                  <option value="unknown">Non classée</option>
+                </select>
+              </label>
+            </div>
+          </section>
+        )}
 
-            <label className="block">
-              <span className="mb-2 block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Ville</span>
-              <select
-                className="w-full rounded-lg border-none bg-surface-container-low py-3 px-4 text-sm focus:ring-2 focus:ring-secondary/20"
-                onChange={(event) => setSelectedCity(event.target.value)}
-                value={selectedCity}
-              >
-                <option value="all">Toutes</option>
-                {cities.map((city) => (
-                  <option key={city} value={city}>
-                    {city}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-        </section>
-
-        {isLoading ? (
+        {isInitialLoading ? (
+          <CardGridSkeleton count={6} />
+        ) : isLoading ? (
           <div className="rounded-2xl bg-white p-8 text-sm font-semibold text-on-surface-variant shadow-sm">
-            Chargement des annonces ETL depuis la base...
+            Actualisation des annonces ETL...
           </div>
-        ) : visibleListings.length === 0 ? (
+        ) : marketListings.length === 0 ? (
           <div className="rounded-2xl bg-white p-8 text-sm font-semibold text-on-surface-variant shadow-sm">
             Aucune annonce ne correspond aux filtres actuels.
           </div>
         ) : (
           <>
             <section className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-6">
-              {visibleListings.map((listing) => (
+              {marketListings.map((listing) => (
                 <article className="rounded-2xl border border-slate-200/60 bg-white overflow-hidden shadow-sm" key={listing.id}>
                   <div className="aspect-[16/10] bg-surface-container-low overflow-hidden">
                     {listing.primary_image_url ? (
@@ -359,11 +384,12 @@ export default function MarketListingsPage() {
 
             <section className="mt-8 flex flex-col md:flex-row items-center justify-between gap-4 rounded-2xl bg-surface-container-lowest px-6 py-5 shadow-[0_12px_40px_rgba(26,28,29,0.06)]">
               <p className="text-sm text-on-surface-variant">
-                Page {currentPage} sur {totalPages} · {filteredListings.length} annonces visibles
+                Page {currentPage} sur {totalPages} · {totalCount} annonces au total
               </p>
               <div className="flex items-center gap-3">
                 <button
                   className="rounded-lg border border-outline-variant/30 px-4 py-2 text-sm font-semibold text-primary disabled:opacity-40"
+                  data-disable-prototype-actions="true"
                   disabled={currentPage <= 1}
                   onClick={() => setPage((value) => Math.max(1, value - 1))}
                   type="button"
@@ -372,6 +398,7 @@ export default function MarketListingsPage() {
                 </button>
                 <button
                   className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white disabled:opacity-40"
+                  data-disable-prototype-actions="true"
                   disabled={currentPage >= totalPages}
                   onClick={() => setPage((value) => Math.min(totalPages, value + 1))}
                   type="button"

@@ -1,306 +1,800 @@
+import { useEffect, useMemo, useState } from "react";
 import ImportedPageDocument from "../components/ImportedPageDocument";
+import { useAuth } from "../auth/AuthContext";
+import { WorkspacePageLoader } from "../components/LoadingState";
+import { apiRequest, getErrorMessage } from "../lib/api";
 
-const pageStyles = `body { font-family: 'Inter', sans-serif; }
-        h1, h2, h3, .font-headline { font-family: 'Manrope', sans-serif; }
-        .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
-        .no-scrollbar::-webkit-scrollbar { display: none; }`;
+const pageStyles = `.material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }`;
+
+type ApiNumber = number | string | null;
+type StrategyKey = "flip" | "long_term" | "seasonal";
+
+type ScenarioForm = {
+  annual_expense_rate: string;
+  appreciation_rate: string;
+  down_payment: string;
+  exit_cost_rate: string;
+  holding_period_years: string;
+  loan_rate: string;
+  loan_years: string;
+  monthly_rent: string;
+  purchase_price: string;
+  renovation_budget: string;
+};
+
+type ScenarioSimulationResponse = {
+  annual_noi: ApiNumber;
+  equity_multiple: ApiNumber;
+  loan_amount: ApiNumber;
+  monthly_debt_service: ApiNumber;
+  net_exit_proceeds: ApiNumber;
+  projected_exit_value: ApiNumber;
+  projected_irr: ApiNumber;
+  projected_monthly_cashflow: ApiNumber;
+  purchase_price: ApiNumber;
+  remaining_debt_at_exit: ApiNumber;
+  total_profit: ApiNumber;
+};
+
+type SavedScenario = {
+  created_at: string;
+  holding_period_years: number;
+  id: number;
+  notes: string;
+  organization_name: string;
+  projected_exit_value: ApiNumber;
+  projected_irr: ApiNumber;
+  projected_monthly_cashflow: ApiNumber;
+  strategy: StrategyKey;
+  title: string;
+};
+
+type Organization = {
+  id: number;
+  name: string;
+};
+
+const defaultForm: ScenarioForm = {
+  annual_expense_rate: "22",
+  appreciation_rate: "4.5",
+  down_payment: "450000",
+  exit_cost_rate: "4",
+  holding_period_years: "10",
+  loan_rate: "4.2",
+  loan_years: "20",
+  monthly_rent: "14500",
+  purchase_price: "1800000",
+  renovation_budget: "120000",
+};
+
+const strategyOrder: StrategyKey[] = ["long_term", "seasonal", "flip"];
+
+const strategyMeta: Record<
+  StrategyKey,
+  {
+    accent: string;
+    description: string;
+    label: string;
+  }
+> = {
+  flip: {
+    accent: "from-[#7b341e] via-[#c05621] to-[#f6ad55]",
+    description: "Valorisation rapide après travaux et sortie courte.",
+    label: "Achat-revente",
+  },
+  long_term: {
+    accent: "from-[#183153] via-[#1a237e] to-[#2c5282]",
+    description: "Stabilité locative et création de valeur progressive.",
+    label: "Longue durée",
+  },
+  seasonal: {
+    accent: "from-[#0f766e] via-[#1b6d24] to-[#4ade80]",
+    description: "Rendement plus offensif avec exploitation active.",
+    label: "Saisonnier",
+  },
+};
+
+function toNumber(value: ApiNumber | undefined) {
+  if (value === null || value === undefined || value === "") {
+    return 0;
+  }
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function formatMoney(value: ApiNumber | undefined, compact = false) {
+  const amount = toNumber(value);
+  if (compact && Math.abs(amount) >= 1_000_000) {
+    return `${(amount / 1_000_000).toLocaleString("fr-MA", {
+      maximumFractionDigits: 2,
+      minimumFractionDigits: 1,
+    })} MDH`;
+  }
+
+  return `${amount.toLocaleString("fr-MA", {
+    maximumFractionDigits: 0,
+  })} MAD`;
+}
+
+function formatPercent(value: ApiNumber | undefined) {
+  return `${toNumber(value).toLocaleString("fr-MA", {
+    maximumFractionDigits: 1,
+    minimumFractionDigits: 1,
+  })}%`;
+}
+
+function formatMultiple(value: ApiNumber | undefined) {
+  const amount = toNumber(value);
+  if (!amount) {
+    return "N/A";
+  }
+  return `${amount.toLocaleString("fr-MA", {
+    maximumFractionDigits: 2,
+    minimumFractionDigits: 1,
+  })}x`;
+}
+
+function formatDate(value: string) {
+  if (!value) {
+    return "N/A";
+  }
+  return new Intl.DateTimeFormat("fr-MA", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(value));
+}
+
+function parseFormNumber(value: string) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function buildScenarioPayload(form: ScenarioForm, strategy: StrategyKey) {
+  const base = {
+    annual_expense_rate: parseFormNumber(form.annual_expense_rate),
+    appreciation_rate: parseFormNumber(form.appreciation_rate),
+    down_payment: parseFormNumber(form.down_payment),
+    exit_cost_rate: parseFormNumber(form.exit_cost_rate),
+    holding_period_years: Math.max(1, parseFormNumber(form.holding_period_years)),
+    loan_rate: parseFormNumber(form.loan_rate),
+    loan_years: Math.max(1, parseFormNumber(form.loan_years)),
+    monthly_rent: parseFormNumber(form.monthly_rent),
+    purchase_price: parseFormNumber(form.purchase_price),
+    renovation_budget: parseFormNumber(form.renovation_budget),
+  };
+
+  if (strategy === "seasonal") {
+    return {
+      ...base,
+      annual_expense_rate: base.annual_expense_rate + 8,
+      appreciation_rate: base.appreciation_rate + 1,
+      holding_period_years: Math.max(base.holding_period_years, 8),
+      monthly_rent: base.monthly_rent * 1.55,
+      renovation_budget: base.renovation_budget * 1.15,
+    };
+  }
+
+  if (strategy === "flip") {
+    return {
+      ...base,
+      annual_expense_rate: Math.max(8, base.annual_expense_rate - 10),
+      appreciation_rate: base.appreciation_rate + 9,
+      exit_cost_rate: base.exit_cost_rate + 1,
+      holding_period_years: Math.min(Math.max(1, base.holding_period_years), 2),
+      loan_years: Math.min(base.loan_years, 10),
+      monthly_rent: base.monthly_rent * 0.2,
+      renovation_budget: base.renovation_budget * 1.4,
+    };
+  }
+
+  return base;
+}
+
+function strategySortScore(simulation: ScenarioSimulationResponse | null) {
+  if (!simulation) {
+    return -Infinity;
+  }
+  const irr = toNumber(simulation.projected_irr);
+  if (irr > 0) {
+    return irr;
+  }
+  return toNumber(simulation.total_profit);
+}
 
 export default function ScenarioSimulatorMarocPage() {
+  const { token } = useAuth();
+  const [form, setForm] = useState<ScenarioForm>(defaultForm);
+  const [organizations, setOrganizations] = useState<Organization[]>([]);
+  const [savedScenarios, setSavedScenarios] = useState<SavedScenario[]>([]);
+  const [simulations, setSimulations] = useState<Record<StrategyKey, ScenarioSimulationResponse | null>>({
+    flip: null,
+    long_term: null,
+    seasonal: null,
+  });
+  const [selectedStrategy, setSelectedStrategy] = useState<StrategyKey>("long_term");
+  const [error, setError] = useState("");
+  const [saveMessage, setSaveMessage] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadBaseData() {
+      try {
+        const [organizationPayload, scenarioPayload] = await Promise.all([
+          apiRequest<Organization[]>("/organizations/", { token }),
+          apiRequest<SavedScenario[]>("/scenarios/", { token }),
+        ]);
+
+        if (!active) {
+          return;
+        }
+
+        setOrganizations(organizationPayload);
+        setSavedScenarios(scenarioPayload);
+      } catch (requestError) {
+        if (!active) {
+          return;
+        }
+        setError(getErrorMessage(requestError, "Impossible de charger les scénarios sauvegardés."));
+      }
+    }
+
+    void loadBaseData();
+
+    return () => {
+      active = false;
+    };
+  }, [token]);
+
+  useEffect(() => {
+    let active = true;
+    const timeoutId = window.setTimeout(() => {
+      void (async () => {
+        setIsLoading(true);
+        setError("");
+
+        try {
+          const payloads = strategyOrder.map((strategy) =>
+            apiRequest<ScenarioSimulationResponse>("/ml/scenario-simulation/", {
+              method: "POST",
+              token,
+              body: buildScenarioPayload(form, strategy),
+            }),
+          );
+
+          const [longTerm, seasonal, flip] = await Promise.all(payloads);
+
+          if (!active) {
+            return;
+          }
+
+          const nextSimulations = {
+            flip,
+            long_term: longTerm,
+            seasonal: seasonal,
+          };
+
+          setSimulations(nextSimulations);
+
+          const bestStrategy = strategyOrder.reduce((best, current) =>
+            strategySortScore(nextSimulations[current]) > strategySortScore(nextSimulations[best])
+              ? current
+              : best,
+          );
+
+          setSelectedStrategy((current) => (nextSimulations[current] ? current : bestStrategy));
+        } catch (requestError) {
+          if (!active) {
+            return;
+          }
+          setError(getErrorMessage(requestError, "Impossible de recalculer les scénarios."));
+        } finally {
+          if (active) {
+            setIsLoading(false);
+          }
+        }
+      })();
+    }, 250);
+
+    return () => {
+      active = false;
+      window.clearTimeout(timeoutId);
+    };
+  }, [form, token]);
+
+  function updateField<K extends keyof ScenarioForm>(field: K, value: ScenarioForm[K]) {
+    setSaveMessage("");
+    setForm((current) => ({ ...current, [field]: value }));
+  }
+
+  const bestStrategy = useMemo(
+    () =>
+      strategyOrder.reduce((best, current) =>
+        strategySortScore(simulations[current]) > strategySortScore(simulations[best]) ? current : best,
+      ),
+    [simulations],
+  );
+
+  const activeSimulation = simulations[selectedStrategy];
+  const isInitialLoading =
+    isLoading &&
+    organizations.length === 0 &&
+    savedScenarios.length === 0 &&
+    Object.values(simulations).every((simulation) => simulation === null) &&
+    !error;
+
+  const projectionBars = useMemo(() => {
+    if (!activeSimulation) {
+      return [];
+    }
+
+    const values = [
+      { label: "Dette", value: toNumber(activeSimulation.loan_amount) },
+      { label: "NOI annuel", value: toNumber(activeSimulation.annual_noi) },
+      { label: "Exit net", value: toNumber(activeSimulation.net_exit_proceeds) },
+      { label: "Profit", value: toNumber(activeSimulation.total_profit) },
+    ];
+
+    const maxValue = Math.max(1, ...values.map((item) => Math.abs(item.value)));
+
+    return values.map((item) => ({
+      ...item,
+      height: Math.max(12, Math.round((Math.abs(item.value) / maxValue) * 100)),
+    }));
+  }, [activeSimulation]);
+
+  async function saveScenario() {
+    if (!activeSimulation) {
+      setSaveMessage("Aucune simulation prête à sauvegarder.");
+      return;
+    }
+
+    const organization = organizations[0];
+    if (!organization) {
+      setSaveMessage("Aucune organisation visible pour enregistrer ce scénario.");
+      return;
+    }
+
+    setIsSaving(true);
+    setSaveMessage("");
+
+    try {
+      const strategyPayload = buildScenarioPayload(form, selectedStrategy);
+      const response = await apiRequest<SavedScenario>("/scenarios/", {
+        method: "POST",
+        token,
+        body: {
+          assumptions: {
+            ...strategyPayload,
+            source: "scenario-simulator-maroc",
+          },
+          holding_period_years: strategyPayload.holding_period_years,
+          loan_rate: strategyPayload.loan_rate,
+          loan_years: strategyPayload.loan_years,
+          notes: `Scénario ${strategyMeta[selectedStrategy].label} généré depuis l'interface.`,
+          organization: organization.id,
+          projected_exit_value: toNumber(activeSimulation.projected_exit_value),
+          projected_irr: toNumber(activeSimulation.projected_irr),
+          projected_monthly_cashflow: toNumber(activeSimulation.projected_monthly_cashflow),
+          renovation_budget: strategyPayload.renovation_budget,
+          strategy: selectedStrategy,
+          title: `${strategyMeta[selectedStrategy].label} · ${strategyPayload.purchase_price.toLocaleString("fr-MA")} MAD`,
+          down_payment: strategyPayload.down_payment,
+        },
+      });
+
+      setSavedScenarios((current) => [response, ...current]);
+      setSaveMessage("Scénario enregistré avec succès dans la base.");
+    } catch (requestError) {
+      setSaveMessage(getErrorMessage(requestError, "Impossible d'enregistrer ce scénario."));
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
   return (
     <ImportedPageDocument
-      bodyClassName="bg-background text-on-background min-h-screen"
-      title="Simulateur de Scénarios d'Investissement | SmartEstate Morocco"
+      bodyClassName="bg-background font-body text-on-surface antialiased"
+      title="SmartEstate | Simulateur de Scénarios"
       styles={pageStyles}
     >
-      <div>
-  {/* SideNavBar Execution */}
-  <aside className="flex flex-col h-full py-8 px-6 fixed left-0 top-0 z-40 bg-[#ffffff] dark:bg-slate-900 h-screen w-64 font-inter text-sm tracking-normal font-medium">
-    <div className="mb-8">
-      <h1 className="text-xl font-extrabold text-[#1A237E] dark:text-indigo-300">SmartEstate</h1>
-      <p className="text-on-surface-variant text-xs opacity-70">Institutional Grade</p>
-    </div>
-    <nav className="flex-1 space-y-2">
-      <a className="flex items-center gap-3 px-4 py-3 text-[#454652] hover:text-[#1b6d24] hover:translate-x-1 transition-all" href="#">
-        <span className="material-symbols-outlined">dashboard</span>
-        Dashboard
-      </a>
-      <a className="flex items-center gap-3 px-4 py-3 text-[#454652] hover:text-[#1b6d24] hover:translate-x-1 transition-all" href="#">
-        <span className="material-symbols-outlined">account_balance_wallet</span>
-        Portfolio
-      </a>
-      <a className="flex items-center gap-3 px-4 py-3 text-[#454652] hover:text-[#1b6d24] hover:translate-x-1 transition-all" href="#">
-        <span className="material-symbols-outlined">calculate</span>
-        Estimation
-      </a>
-      <a className="flex items-center gap-3 px-4 py-3 text-[#1b6d24] bg-[#f3f3f5] rounded-lg" href="#">
-        <span className="material-symbols-outlined">query_stats</span>
-        Scenarios
-      </a>
-      <a className="flex items-center gap-3 px-4 py-3 text-[#454652] hover:text-[#1b6d24] hover:translate-x-1 transition-all" href="#">
-        <span className="material-symbols-outlined">auto_awesome</span>
-        Recommendations
-      </a>
-      <a className="flex items-center gap-3 px-4 py-3 text-[#454652] hover:text-[#1b6d24] hover:translate-x-1 transition-all" href="#">
-        <span className="material-symbols-outlined">description</span>
-        Reports
-      </a>
-      <a className="flex items-center gap-3 px-4 py-3 text-[#454652] hover:text-[#1b6d24] hover:translate-x-1 transition-all" href="#">
-        <span className="material-symbols-outlined">group</span>
-        Team
-      </a>
-    </nav>
-    <button className="mt-4 mb-8 bg-gradient-to-br from-secondary to-on-secondary-container text-white py-3 px-4 rounded-xl font-bold shadow-lg flex items-center justify-center gap-2">
-      <span className="material-symbols-outlined">add</span>
-      New Analysis
-    </button>
-    <div className="space-y-2 border-t border-surface-container-high pt-6">
-      <a className="flex items-center gap-3 px-4 py-2 text-[#454652] hover:text-[#1b6d24]" href="#">
-        <span className="material-symbols-outlined">help</span>
-        Help Center
-      </a>
-      <a className="flex items-center gap-3 px-4 py-2 text-[#454652] hover:text-[#1b6d24]" href="#">
-        <span className="material-symbols-outlined">logout</span>
-        Sign Out
-      </a>
-    </div>
-  </aside>
-  {/* Main Content Canvas */}
-  <main className="ml-64 min-h-screen flex flex-col">
-    {/* TopNavBar Execution */}
-    <header className="flex justify-between items-center px-8 h-16 w-full sticky top-0 z-50 bg-[#f9f9fb] dark:bg-slate-950 font-manrope tracking-tight font-semibold shadow-[0_12px_40px_rgba(26,28,29,0.06)]">
-      <div className="flex items-center gap-4">
-        <h2 className="text-lg font-bold text-[#1A237E]">Simulateur de Scénarios</h2>
-      </div>
-      <div className="flex items-center gap-6">
-        <div className="flex items-center bg-surface-container rounded-full px-4 py-1.5 gap-2">
-          <span className="material-symbols-outlined text-outline text-sm">search</span>
-          <input className="bg-transparent border-none focus:ring-0 text-sm w-48" placeholder="Rechercher un actif..." type="text" />
-        </div>
-        <div className="flex items-center gap-4">
-          <span className="material-symbols-outlined text-[#454652] cursor-pointer hover:bg-[#f3f3f5] p-2 rounded-full transition-colors">notifications</span>
-          <span className="material-symbols-outlined text-[#454652] cursor-pointer hover:bg-[#f3f3f5] p-2 rounded-full transition-colors">settings</span>
-          <div className="w-8 h-8 rounded-full bg-primary overflow-hidden border-2 border-white shadow-sm">
-            <img alt="Yassine Mansouri" className="w-full h-full object-cover" data-alt="portrait of a professional man in business attire against a neutral backdrop with clean lighting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAQtoMXRQJ1DOzTE-yRsmupLL0XUNc49EXgzjYh_Yac6OBDDMdQygXchr4IyYpx9em_hsqJSD_Law8M9CSjzmXan1lPKLe1SDwnnhTdqL3lTVdWT1WUa4t4skFye00q5GVuuzS1dDF7hVqV13zdp95PHtyIDHowIm2GCsKpaiG9sP_oBUOnzuK6xPkbqg_yIVkU5LgOSSj7pwjfTJ1Hf7KeOb-MILcG1hRwzGrGFAAuQoxOBgECjVVdDJ5cJkWEAT8rs34acMMb6FTZ" />
-          </div>
-        </div>
-      </div>
-    </header>
-    <section className="p-10 space-y-10">
-      {/* Header Section with Asymmetry */}
-      <div className="flex flex-col md:flex-row justify-between items-end gap-6 border-b border-surface-container pb-8">
-        <div className="max-w-2xl">
-          <span className="text-secondary font-bold uppercase tracking-widest text-xs mb-2 block">Outil de projection stratégique</span>
-          <h2 className="text-4xl font-extrabold text-primary mb-4 leading-tight">Optimisez votre Patrimoine Immobilier au Maroc</h2>
-          <p className="text-on-surface-variant leading-relaxed">Simulez l'impact financier de différentes stratégies d'acquisition et de gestion pour vos actifs à Casablanca, Marrakech ou Tanger.</p>
-        </div>
-        <div className="flex gap-4">
-          <button className="bg-surface-container-highest text-on-surface px-6 py-3 rounded-xl font-semibold flex items-center gap-2 hover:bg-surface-dim transition-all">
-            <span className="material-symbols-outlined">share</span> Partager
-          </button>
-          <button className="bg-primary text-white px-6 py-3 rounded-xl font-semibold flex items-center gap-2 shadow-xl">
-            <span className="material-symbols-outlined">download</span> Exporter PDF
-          </button>
-        </div>
-      </div>
-      {/* Simulation Parameters Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <div className="bg-surface-container-lowest p-6 rounded-2xl shadow-sm space-y-4">
-          <label className="block text-xs font-bold text-outline-variant uppercase">Apport Personnel (MAD)</label>
-          <div className="text-2xl font-bold text-primary">1,250,000</div>
-          <input className="w-full accent-secondary" max={5000000} min={100000} step={50000} type="range" />
-        </div>
-        <div className="bg-surface-container-lowest p-6 rounded-2xl shadow-sm space-y-4">
-          <label className="block text-xs font-bold text-outline-variant uppercase">Taux de Crédit (%)</label>
-          <div className="text-2xl font-bold text-primary">4.25%</div>
-          <input className="w-full accent-secondary" max={6} min={3} step="0.05" type="range" />
-        </div>
-        <div className="bg-surface-container-lowest p-6 rounded-2xl shadow-sm space-y-4">
-          <label className="block text-xs font-bold text-outline-variant uppercase">Budget Travaux (MAD)</label>
-          <div className="text-2xl font-bold text-primary">450,000</div>
-          <input className="w-full accent-secondary" max={2000000} min={0} step={25000} type="range" />
-        </div>
-        <div className="bg-surface-container-lowest p-6 rounded-2xl shadow-sm space-y-4">
-          <label className="block text-xs font-bold text-outline-variant uppercase">Durée (Années)</label>
-          <div className="text-2xl font-bold text-primary">15 Ans</div>
-          <input className="w-full accent-secondary" max={25} min={5} step={1} type="range" />
-        </div>
-      </div>
-      {/* Comparison Matrix */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Achat-Revente */}
-        <div className="relative group overflow-hidden bg-surface-container-lowest p-8 rounded-3xl border border-transparent hover:border-secondary transition-all">
-          <div className="absolute top-0 right-0 p-4 opacity-10">
-            <span className="material-symbols-outlined text-8xl">holiday_village</span>
-          </div>
-          <h3 className="text-xl font-bold text-primary mb-6">Achat-Revente (Flip)</h3>
-          <div className="space-y-6">
-            <div>
-              <p className="text-xs text-outline mb-1">TRI ESTIMÉ</p>
-              <p className="text-3xl font-black text-secondary">22.4%</p>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-[10px] text-outline font-bold uppercase">Plus-value nette</p>
-                <p className="text-lg font-bold text-on-surface">+840K MAD</p>
-              </div>
-              <div>
-                <p className="text-[10px] text-outline font-bold uppercase">Durée cible</p>
-                <p className="text-lg font-bold text-on-surface">18 Mois</p>
-              </div>
-            </div>
-            <div className="pt-4 border-t border-surface-container">
-              <p className="text-sm text-on-surface-variant leading-relaxed">Idéal pour une augmentation rapide du capital. Risque de marché modéré selon la zone.</p>
-            </div>
-          </div>
-        </div>
-        {/* Location Longue Durée */}
-        <div className="relative group bg-primary-container p-8 rounded-3xl border border-transparent transition-all">
-          <div className="absolute top-0 right-0 p-4 opacity-20 text-on-primary-container">
-            <span className="material-symbols-outlined text-8xl">apartment</span>
-          </div>
-          <h3 className="text-xl font-bold text-white mb-6">Location Longue Durée</h3>
-          <div className="space-y-6">
-            <div>
-              <p className="text-xs text-on-primary-container mb-1">RENDEMENT NET</p>
-              <p className="text-3xl font-black text-secondary-fixed">6.8%</p>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-[10px] text-on-primary-container font-bold uppercase">Cash-flow mens.</p>
-                <p className="text-lg font-bold text-white">+4,200 MAD</p>
-              </div>
-              <div>
-                <p className="text-[10px] text-on-primary-container font-bold uppercase">Vacance loc.</p>
-                <p className="text-lg font-bold text-white">5%</p>
-              </div>
-            </div>
-            <div className="pt-4 border-t border-primary/20">
-              <p className="text-sm text-primary-fixed leading-relaxed">Stabilité institutionnelle. Profil de risque faible avec valorisation organique constante.</p>
-            </div>
-          </div>
-        </div>
-        {/* Location Saisonnière */}
-        <div className="relative group bg-surface-container-lowest p-8 rounded-3xl border border-transparent hover:border-secondary transition-all">
-          <div className="absolute top-0 right-0 p-4 opacity-10">
-            <span className="material-symbols-outlined text-8xl">villa</span>
-          </div>
-          <h3 className="text-xl font-bold text-primary mb-6">Location Saisonnière</h3>
-          <div className="space-y-6">
-            <div>
-              <p className="text-xs text-outline mb-1">RENDEMENT NET</p>
-              <p className="text-3xl font-black text-secondary">11.2%</p>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-[10px] text-outline font-bold uppercase">Cash-flow mens.</p>
-                <p className="text-lg font-bold text-on-surface">+12,500 MAD</p>
-              </div>
-              <div>
-                <p className="text-[10px] text-outline font-bold uppercase">Occupation</p>
-                <p className="text-lg font-bold text-on-surface">65%</p>
-              </div>
-            </div>
-            <div className="pt-4 border-t border-surface-container">
-              <p className="text-sm text-on-surface-variant leading-relaxed">Haute rentabilité en zone touristique (Guéliz, Hivernage). Gestion active requise.</p>
-            </div>
-          </div>
-        </div>
-      </div>
-      {/* Visualization: Net Value Evolution */}
-      <div className="bg-surface-container-lowest p-10 rounded-3xl shadow-sm overflow-hidden relative">
-        <div className="flex justify-between items-start mb-12">
-          <div>
-            <h3 className="text-2xl font-bold text-primary">Projection de la Valeur Nette</h3>
-            <p className="text-on-surface-variant">Évolution comparative sur 15 ans (Millions MAD)</p>
-          </div>
-          <div className="flex gap-4 items-center">
-            <div className="flex items-center gap-2">
-              <span className="w-3 h-3 rounded-full bg-secondary" />
-              <span className="text-xs font-bold text-outline">Long Terme</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="w-3 h-3 rounded-full bg-primary-container" />
-              <span className="text-xs font-bold text-outline">Saisonnier</span>
-            </div>
-          </div>
-        </div>
-        {/* Custom Chart Visualization (SVG) */}
-        <div className="h-64 w-full relative">
-          <svg className="w-full h-full overflow-visible" viewBox="0 0 1000 200">
-            {/* Grid Lines */}
-            <line stroke="#eeeef0" strokeWidth={1} x1={0} x2={1000} y1={200} y2={200} />
-            <line stroke="#eeeef0" strokeWidth={1} x1={0} x2={1000} y1={150} y2={150} />
-            <line stroke="#eeeef0" strokeWidth={1} x1={0} x2={1000} y1={100} y2={100} />
-            <line stroke="#eeeef0" strokeWidth={1} x1={0} x2={1000} y1={50} y2={50} />
-            {/* Area Long Term */}
-            <path d="M0 180 Q 250 160, 500 120 T 1000 40 L 1000 200 L 0 200 Z" fill="#1b6d24" fillOpacity="0.05" />
-            <path d="M0 180 Q 250 160, 500 120 T 1000 40" fill="none" stroke="#1b6d24" strokeLinecap="round" strokeWidth={4} />
-            {/* Path Seasonal */}
-            <path d="M0 180 Q 250 170, 500 100 T 1000 10" fill="none" opacity="0.6" stroke="#1a237e" strokeDasharray="8 4" strokeWidth={4} />
-            {/* Interactivity Points */}
-            <circle cx={500} cy={120} fill="#1b6d24" r={6} />
-            <circle cx={1000} cy={40} fill="#1b6d24" r={6} />
-          </svg>
-          {/* Floating Data Node */}
-          <div className="absolute top-[10%] left-[48%] bg-white p-3 rounded-lg shadow-xl border border-surface-container translate-x-[-50%]">
-            <p className="text-[10px] text-outline font-bold">ANNÉE 7</p>
-            <p className="text-sm font-bold text-primary">8.42M MAD</p>
-          </div>
-        </div>
-        <div className="flex justify-between mt-6 text-[10px] font-bold text-outline-variant px-2">
-          <span>2024</span>
-          <span>2027</span>
-          <span>2030</span>
-          <span>2033</span>
-          <span>2036</span>
-          <span>2039</span>
-        </div>
-      </div>
-      {/* AI Insight Section */}
-      <div className="bg-secondary-fixed p-1 bg-opacity-30 rounded-3xl">
-        <div className="bg-surface-container-lowest rounded-[22px] p-8 flex flex-col md:flex-row gap-10 items-center">
-          <div className="flex-shrink-0 relative">
-            <div className="w-20 h-20 bg-secondary rounded-2xl flex items-center justify-center text-white shadow-2xl">
-              <span className="material-symbols-outlined text-4xl" style={{fontVariationSettings: '"FILL" 1'}}>auto_awesome</span>
-            </div>
-            <div className="absolute -bottom-2 -right-2 bg-primary w-8 h-8 rounded-full border-4 border-white flex items-center justify-center">
-              <span className="material-symbols-outlined text-white text-xs">verified</span>
-            </div>
-          </div>
-          <div className="space-y-4">
-            <div className="flex items-center gap-3">
-              <h4 className="text-xl font-bold text-primary">L'Avis de l'Expert IA SmartEstate</h4>
-              <span className="bg-secondary/10 text-secondary text-[10px] font-black px-2 py-0.5 rounded-full uppercase">Analyse en temps réel</span>
-            </div>
-            <p className="text-on-surface text-lg leading-relaxed font-medium">
-              "Basé sur vos paramètres, le scénario de <span className="text-secondary font-bold">Location Saisonnière à Marrakech (Guéliz)</span> présente le meilleur ratio rendement/risque. L'apport de 1.25M MAD permet de limiter l'endettement tout en bénéficiant de l'effet de levier sur un actif premium."
+      <main className="md:ml-72 min-h-screen px-6 md:px-12 py-8">
+        <section className="mb-8 flex flex-col xl:flex-row xl:items-end justify-between gap-6">
+          <div className="max-w-3xl">
+            <span className="mb-2 block text-[10px] font-bold uppercase tracking-[0.22em] text-secondary">
+              Scénarios d'investissement pilotés par le backend
+            </span>
+            <h1 className="text-4xl md:text-5xl font-headline font-extrabold tracking-tight text-primary">
+              Simulateur de scénarios
+            </h1>
+            <p className="mt-3 text-sm md:text-base leading-relaxed text-on-surface-variant">
+              Ajustez les hypothèses financières et comparez trois stratégies concrètes pour transformer vos
+              données marché en décision d’investissement.
             </p>
-            <div className="flex gap-8 pt-2">
-              <div className="flex items-center gap-2">
-                <span className="material-symbols-outlined text-secondary text-sm">trending_up</span>
-                <span className="text-xs font-semibold text-on-surface-variant">Confiance: 94%</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="material-symbols-outlined text-secondary text-sm">info</span>
-                <span className="text-xs font-semibold text-on-surface-variant">Source: Data Marché 2024 Q3</span>
-              </div>
-            </div>
           </div>
-        </div>
-      </div>
-    </section>
-    {/* Footer Whitespace as per Editorial Rule */}
-    <footer className="h-32" />
-  </main>
-  {/* FAB Suppression logic: Only on main dashboard, but adding a "Save Scenario" button as contextually relevant */}
-  <button className="fixed bottom-10 right-10 w-16 h-16 bg-primary text-white rounded-full shadow-2xl flex items-center justify-center group hover:scale-110 transition-transform z-50">
-    <span className="material-symbols-outlined text-3xl">save</span>
-    <div className="absolute right-20 bg-primary text-white px-4 py-2 rounded-lg text-sm font-bold opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none shadow-lg">
-      Enregistrer ce scénario
-    </div>
-  </button>
-</div>
 
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              className="inline-flex items-center gap-2 rounded-xl bg-surface-container-low px-5 py-3 text-sm font-bold text-primary"
+              data-disable-prototype-actions="true"
+              onClick={() => setForm(defaultForm)}
+              type="button"
+            >
+              <span className="material-symbols-outlined text-base">restart_alt</span>
+              Réinitialiser
+            </button>
+            <button
+              className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-bold text-white shadow-sm disabled:opacity-60"
+              data-disable-prototype-actions="true"
+              disabled={isSaving || isLoading}
+              onClick={() => void saveScenario()}
+              type="button"
+            >
+              <span className="material-symbols-outlined text-base">save</span>
+              {isSaving ? "Enregistrement..." : "Enregistrer le scénario"}
+            </button>
+          </div>
+        </section>
+
+        {error && (
+          <div className="mb-6 rounded-xl border border-error/20 bg-error-container px-5 py-4 text-sm font-semibold text-error">
+            {error}
+          </div>
+        )}
+
+        {saveMessage && (
+          <div className="mb-6 rounded-xl border border-secondary/20 bg-secondary-container/35 px-5 py-4 text-sm font-semibold text-secondary">
+            {saveMessage}
+          </div>
+        )}
+
+        {isInitialLoading ? (
+          <WorkspacePageLoader cardCount={3} showChart sidePanelCount={2} />
+        ) : (
+          <>
+            <section className="mb-8 grid grid-cols-1 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] gap-8">
+              <div className="rounded-2xl bg-surface-container-lowest p-6 md:p-8 shadow-[0_12px_40px_rgba(26,28,29,0.06)]">
+                <div className="mb-6 flex items-center justify-between gap-4">
+                  <div>
+                    <h2 className="text-2xl font-headline font-bold text-primary">Hypothèses</h2>
+                    <p className="mt-1 text-sm text-on-surface-variant">
+                      Tous les champs recalculent automatiquement les scénarios.
+                    </p>
+                  </div>
+                  <span className="rounded-full bg-surface-container-low px-4 py-2 text-xs font-bold uppercase tracking-widest text-on-surface-variant">
+                    {organizations[0]?.name || "Mode démo"}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <Field
+                    label="Prix d'achat"
+                    onChange={(value) => updateField("purchase_price", value)}
+                    suffix="MAD"
+                    value={form.purchase_price}
+                  />
+                  <Field
+                    label="Apport"
+                    onChange={(value) => updateField("down_payment", value)}
+                    suffix="MAD"
+                    value={form.down_payment}
+                  />
+                  <Field
+                    label="Loyer mensuel"
+                    onChange={(value) => updateField("monthly_rent", value)}
+                    suffix="MAD"
+                    value={form.monthly_rent}
+                  />
+                  <Field
+                    label="Budget travaux"
+                    onChange={(value) => updateField("renovation_budget", value)}
+                    suffix="MAD"
+                    value={form.renovation_budget}
+                  />
+                  <Field
+                    label="Taux crédit"
+                    onChange={(value) => updateField("loan_rate", value)}
+                    step="0.1"
+                    suffix="%"
+                    value={form.loan_rate}
+                  />
+                  <Field
+                    label="Durée du prêt"
+                    onChange={(value) => updateField("loan_years", value)}
+                    suffix="ans"
+                    value={form.loan_years}
+                  />
+                  <Field
+                    label="Horizon de détention"
+                    onChange={(value) => updateField("holding_period_years", value)}
+                    suffix="ans"
+                    value={form.holding_period_years}
+                  />
+                  <Field
+                    label="Taux de charges"
+                    onChange={(value) => updateField("annual_expense_rate", value)}
+                    step="0.5"
+                    suffix="%"
+                    value={form.annual_expense_rate}
+                  />
+                  <Field
+                    label="Appréciation annuelle"
+                    onChange={(value) => updateField("appreciation_rate", value)}
+                    step="0.1"
+                    suffix="%"
+                    value={form.appreciation_rate}
+                  />
+                  <Field
+                    label="Coûts de sortie"
+                    onChange={(value) => updateField("exit_cost_rate", value)}
+                    step="0.1"
+                    suffix="%"
+                    value={form.exit_cost_rate}
+                  />
+                </div>
+              </div>
+
+              <div className="rounded-2xl bg-primary p-7 text-white shadow-[0_18px_40px_rgba(26,35,126,0.2)]">
+                <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-primary-fixed-dim">
+                  Lecture recommandée
+                </p>
+                <h2 className="mt-3 text-3xl font-headline font-extrabold">{strategyMeta[bestStrategy].label}</h2>
+                <p className="mt-3 text-sm leading-relaxed text-primary-fixed">
+                  {strategyMeta[bestStrategy].description}
+                </p>
+
+                <div className="mt-6 grid grid-cols-2 gap-3 text-sm">
+                  <DataPill label="TRI projeté" value={formatPercent(simulations[bestStrategy]?.projected_irr)} />
+                  <DataPill
+                    label="Cash-flow mensuel"
+                    value={formatMoney(simulations[bestStrategy]?.projected_monthly_cashflow, true)}
+                  />
+                  <DataPill
+                    label="Profit total"
+                    value={formatMoney(simulations[bestStrategy]?.total_profit, true)}
+                  />
+                  <DataPill
+                    label="Multiple equity"
+                    value={formatMultiple(simulations[bestStrategy]?.equity_multiple)}
+                  />
+                </div>
+
+                <p className="mt-6 text-xs uppercase tracking-widest text-primary-fixed-dim">
+                  Sauvegarde disponible vers `/api/scenarios/`
+                </p>
+              </div>
+            </section>
+
+            <section className="mb-8">
+              <div className="mb-5 flex items-center justify-between gap-4">
+                <div>
+                  <h2 className="text-2xl font-headline font-bold text-primary">Comparatif des stratégies</h2>
+                  <p className="mt-1 text-sm text-on-surface-variant">
+                    Les cartes utilisent le simulateur backend `/api/ml/scenario-simulation/`.
+                  </p>
+                </div>
+                {isLoading && (
+                  <span className="rounded-full bg-surface-container-low px-4 py-2 text-xs font-bold uppercase tracking-widest text-on-surface-variant">
+                    Recalcul en cours
+                  </span>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
+                {strategyOrder.map((strategy) => {
+                  const simulation = simulations[strategy];
+                  const active = selectedStrategy === strategy;
+                  const best = bestStrategy === strategy;
+                  return (
+                    <button
+                      className={
+                        active
+                          ? "overflow-hidden rounded-2xl border-2 border-secondary bg-white text-left shadow-lg"
+                          : "overflow-hidden rounded-2xl border border-slate-200/60 bg-white text-left shadow-sm"
+                      }
+                      data-disable-prototype-actions="true"
+                      key={strategy}
+                      onClick={() => setSelectedStrategy(strategy)}
+                      type="button"
+                    >
+                      <div className={`bg-gradient-to-r ${strategyMeta[strategy].accent} p-5 text-white`}>
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <p className="text-[10px] font-bold uppercase tracking-[0.22em] opacity-80">
+                              {best ? "Meilleur score" : "Stratégie"}
+                            </p>
+                            <h3 className="mt-2 text-2xl font-headline font-extrabold">
+                              {strategyMeta[strategy].label}
+                            </h3>
+                          </div>
+                          {best && (
+                            <span className="rounded-full bg-white/15 px-3 py-1 text-[10px] font-bold uppercase tracking-widest">
+                              recommandée
+                            </span>
+                          )}
+                        </div>
+                        <p className="mt-3 text-sm opacity-90">{strategyMeta[strategy].description}</p>
+                      </div>
+
+                      <div className="p-5">
+                        <div className="grid grid-cols-2 gap-3 text-sm">
+                          <DataPill label="TRI" value={formatPercent(simulation?.projected_irr)} />
+                          <DataPill
+                            label="Cash-flow"
+                            value={formatMoney(simulation?.projected_monthly_cashflow, true)}
+                          />
+                          <DataPill label="Exit net" value={formatMoney(simulation?.net_exit_proceeds, true)} />
+                          <DataPill label="Profit" value={formatMoney(simulation?.total_profit, true)} />
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+
+            <section className="mb-8 grid grid-cols-1 xl:grid-cols-[minmax(0,1.5fr)_360px] gap-8">
+              <div className="rounded-2xl bg-white p-6 md:p-8 shadow-sm">
+                <div className="mb-8 flex flex-col lg:flex-row lg:items-end justify-between gap-5">
+                  <div>
+                    <h2 className="text-2xl font-headline font-bold text-primary">
+                      Projection détaillée · {strategyMeta[selectedStrategy].label}
+                    </h2>
+                    <p className="mt-1 text-sm text-on-surface-variant">
+                      Vue détaillée du scénario sélectionné, à partir des paramètres courants.
+                    </p>
+                  </div>
+                  <span className="rounded-full bg-surface-container-low px-4 py-2 text-xs font-bold uppercase tracking-widest text-on-surface-variant">
+                    Horizon {buildScenarioPayload(form, selectedStrategy).holding_period_years} ans
+                  </span>
+                </div>
+
+                <div className="mb-8 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+                  <DataPill label="Dette mensuelle" value={formatMoney(activeSimulation?.monthly_debt_service)} />
+                  <DataPill label="NOI annuel" value={formatMoney(activeSimulation?.annual_noi, true)} />
+                  <DataPill
+                    label="Valeur de sortie"
+                    value={formatMoney(activeSimulation?.projected_exit_value, true)}
+                  />
+                  <DataPill
+                    label="Dette résiduelle"
+                    value={formatMoney(activeSimulation?.remaining_debt_at_exit, true)}
+                  />
+                </div>
+
+                <div className="h-64 rounded-2xl bg-surface-container-low px-4 pt-8 flex items-end gap-4 overflow-hidden">
+                  {projectionBars.map((bar, index) => (
+                    <div
+                      className={
+                        index === projectionBars.length - 1
+                          ? "flex-1 rounded-t-xl bg-primary"
+                          : "flex-1 rounded-t-xl bg-secondary/75"
+                      }
+                      key={bar.label}
+                      style={{ height: `${bar.height}%` }}
+                      title={`${bar.label}: ${formatMoney(bar.value, true)}`}
+                    />
+                  ))}
+                </div>
+                <div className="mt-4 flex justify-between px-2 text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">
+                  {projectionBars.map((bar) => (
+                    <span key={bar.label}>{bar.label}</span>
+                  ))}
+                </div>
+              </div>
+
+              <aside className="space-y-6">
+                <section className="rounded-2xl bg-surface-container-lowest p-6 shadow-sm">
+                  <h3 className="text-xl font-headline font-bold text-primary">Repères rapides</h3>
+                  <div className="mt-5 space-y-4">
+                    <DataRow label="Prix d'achat" value={formatMoney(activeSimulation?.purchase_price, true)} />
+                    <DataRow label="Montant financé" value={formatMoney(activeSimulation?.loan_amount, true)} />
+                    <DataRow label="Exit net" value={formatMoney(activeSimulation?.net_exit_proceeds, true)} />
+                    <DataRow label="Profit total" value={formatMoney(activeSimulation?.total_profit, true)} />
+                  </div>
+                </section>
+
+                <section className="rounded-2xl bg-surface-container-lowest p-6 shadow-sm">
+                  <h3 className="text-xl font-headline font-bold text-primary">Scénarios sauvegardés</h3>
+                  <p className="mt-1 text-sm text-on-surface-variant">
+                    Historique réel issu de `GET /api/scenarios/`.
+                  </p>
+
+                  <div className="mt-5 space-y-4">
+                    {savedScenarios.length === 0 ? (
+                      <p className="text-sm text-on-surface-variant">Aucun scénario en base pour le moment.</p>
+                    ) : (
+                      savedScenarios.slice(0, 5).map((scenario) => (
+                        <article className="rounded-xl bg-white p-4" key={scenario.id}>
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className="font-bold text-primary">{scenario.title}</p>
+                              <p className="mt-1 text-xs text-on-surface-variant">
+                                {scenario.organization_name} · {strategyMeta[scenario.strategy].label}
+                              </p>
+                            </div>
+                            <span className="rounded-full bg-secondary-container px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-secondary">
+                              {formatPercent(scenario.projected_irr)}
+                            </span>
+                          </div>
+                          <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
+                            <DataPill
+                              label="Cash-flow"
+                              value={formatMoney(scenario.projected_monthly_cashflow, true)}
+                            />
+                            <DataPill label="Exit" value={formatMoney(scenario.projected_exit_value, true)} />
+                          </div>
+                          <p className="mt-3 text-[11px] font-semibold uppercase tracking-widest text-on-surface-variant">
+                            {formatDate(scenario.created_at)}
+                          </p>
+                        </article>
+                      ))
+                    )}
+                  </div>
+                </section>
+              </aside>
+            </section>
+          </>
+        )}
+      </main>
     </ImportedPageDocument>
+  );
+}
+
+function Field({
+  label,
+  onChange,
+  suffix,
+  value,
+  step = "1",
+}: {
+  label: string;
+  onChange: (value: string) => void;
+  step?: string;
+  suffix: string;
+  value: string;
+}) {
+  return (
+    <label className="block">
+      <span className="mb-2 block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">
+        {label}
+      </span>
+      <div className="flex items-center overflow-hidden rounded-xl bg-surface-container-low">
+        <input
+          className="w-full border-none bg-transparent px-4 py-3 text-sm focus:ring-2 focus:ring-secondary/20"
+          min={0}
+          onChange={(event) => onChange(event.target.value)}
+          step={step}
+          type="number"
+          value={value}
+        />
+        <span className="px-4 text-xs font-bold uppercase tracking-widest text-on-surface-variant">
+          {suffix}
+        </span>
+      </div>
+    </label>
+  );
+}
+
+function DataPill({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl bg-surface-container-low px-4 py-3">
+      <p className="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">{label}</p>
+      <p className="mt-1 font-bold text-primary">{value}</p>
+    </div>
+  );
+}
+
+function DataRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between gap-4 border-b border-outline-variant/20 pb-4 text-sm">
+      <span className="text-on-surface-variant">{label}</span>
+      <span className="font-bold text-primary">{value}</span>
+    </div>
   );
 }

@@ -1,6 +1,7 @@
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 import ImportedPageDocument from "../components/ImportedPageDocument";
 import { useAuth } from "../auth/AuthContext";
+import { WorkspacePageLoader } from "../components/LoadingState";
 import { apiRequest, getErrorMessage } from "../lib/api";
 
 const pageStyles = `.material-symbols-outlined {
@@ -252,6 +253,7 @@ export default function AiEstimationPage() {
   const estimateReady = Boolean(result && estimatedValue > 0);
   const mainAmount = formatMainAmount(result?.estimated_value);
   const finalProjection = projection[projection.length - 1];
+  const isInitialLoading = isLoading && result === null && !error;
 
   return (
     <ImportedPageDocument
@@ -324,292 +326,333 @@ export default function AiEstimationPage() {
             </div>
           )}
 
-          <section className="grid grid-cols-1 xl:grid-cols-12 gap-8">
-            <div className="xl:col-span-4 space-y-6">
-              <form
-                className="bg-surface-container-lowest p-6 md:p-8 rounded-xl shadow-[0_12px_40px_rgba(26,28,29,0.06)] space-y-5"
-                onSubmit={submitEstimate}
-              >
-                <div className="flex items-center justify-between gap-4">
-                  <h2 className="text-lg font-headline font-bold text-primary">Paramètres du bien</h2>
-                  <span className="material-symbols-outlined text-secondary">tune</span>
-                </div>
+          {isInitialLoading ? (
+            <WorkspacePageLoader cardCount={3} showChart sidePanelCount={2} />
+          ) : (
+            <section className="grid grid-cols-1 xl:grid-cols-12 gap-8">
+              <div className="xl:col-span-4 space-y-6">
+                <form
+                  className="bg-surface-container-lowest p-6 md:p-8 rounded-xl shadow-[0_12px_40px_rgba(26,28,29,0.06)] space-y-5"
+                  onSubmit={submitEstimate}
+                >
+                  <div className="flex items-center justify-between gap-4">
+                    <h2 className="text-lg font-headline font-bold text-primary">Paramètres du bien</h2>
+                    <span className="material-symbols-outlined text-secondary">tune</span>
+                  </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <label className="block">
-                    <span className="block text-[10px] font-bold uppercase text-on-surface-variant mb-2">Ville</span>
-                    <input
-                      className="w-full bg-surface-container-low border-none rounded-lg text-sm focus:ring-2 focus:ring-secondary/20"
-                      onChange={(event) => updateField("city", event.target.value)}
-                      required
-                      type="text"
-                      value={form.city}
-                    />
-                  </label>
-                  <label className="block">
-                    <span className="block text-[10px] font-bold uppercase text-on-surface-variant mb-2">Quartier</span>
-                    <input
-                      className="w-full bg-surface-container-low border-none rounded-lg text-sm focus:ring-2 focus:ring-secondary/20"
-                      onChange={(event) => updateField("district", event.target.value)}
-                      type="text"
-                      value={form.district}
-                    />
-                  </label>
-                </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <label className="block">
+                      <span className="block text-[10px] font-bold uppercase text-on-surface-variant mb-2">Ville</span>
+                      <input
+                        className="w-full bg-surface-container-low border-none rounded-lg text-sm focus:ring-2 focus:ring-secondary/20"
+                        onChange={(event) => updateField("city", event.target.value)}
+                        required
+                        type="text"
+                        value={form.city}
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="block text-[10px] font-bold uppercase text-on-surface-variant mb-2">Quartier</span>
+                      <input
+                        className="w-full bg-surface-container-low border-none rounded-lg text-sm focus:ring-2 focus:ring-secondary/20"
+                        onChange={(event) => updateField("district", event.target.value)}
+                        type="text"
+                        value={form.district}
+                      />
+                    </label>
+                  </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <label className="block">
+                      <span className="block text-[10px] font-bold uppercase text-on-surface-variant mb-2">Surface m²</span>
+                      <input
+                        className="w-full bg-surface-container-low border-none rounded-lg text-sm focus:ring-2 focus:ring-secondary/20"
+                        min={1}
+                        onChange={(event) => updateField("area_sqm", event.target.value)}
+                        required
+                        type="number"
+                        value={form.area_sqm}
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="block text-[10px] font-bold uppercase text-on-surface-variant mb-2">Transaction</span>
+                      <select
+                        className="w-full bg-surface-container-low border-none rounded-lg text-sm focus:ring-2 focus:ring-secondary/20"
+                        onChange={(event) =>
+                          updateField("transaction_type", event.target.value as EstimationForm["transaction_type"])
+                        }
+                        value={form.transaction_type}
+                      >
+                        <option value="sale">Vente</option>
+                        <option value="rent">Location</option>
+                      </select>
+                    </label>
+                  </div>
+
                   <label className="block">
-                    <span className="block text-[10px] font-bold uppercase text-on-surface-variant mb-2">Surface m²</span>
-                    <input
-                      className="w-full bg-surface-container-low border-none rounded-lg text-sm focus:ring-2 focus:ring-secondary/20"
-                      min={1}
-                      onChange={(event) => updateField("area_sqm", event.target.value)}
-                      required
-                      type="number"
-                      value={form.area_sqm}
-                    />
-                  </label>
-                  <label className="block">
-                    <span className="block text-[10px] font-bold uppercase text-on-surface-variant mb-2">Transaction</span>
+                    <span className="block text-[10px] font-bold uppercase text-on-surface-variant mb-2">Type de bien</span>
                     <select
                       className="w-full bg-surface-container-low border-none rounded-lg text-sm focus:ring-2 focus:ring-secondary/20"
-                      onChange={(event) => updateField("transaction_type", event.target.value as EstimationForm["transaction_type"])}
-                      value={form.transaction_type}
+                      onChange={(event) => updateField("asset_type", event.target.value)}
+                      value={form.asset_type}
                     >
-                      <option value="sale">Vente</option>
-                      <option value="rent">Location</option>
+                      {assetTypes.map(([value, label]) => (
+                        <option key={value} value={value}>
+                          {label}
+                        </option>
+                      ))}
                     </select>
                   </label>
-                </div>
 
-                <label className="block">
-                  <span className="block text-[10px] font-bold uppercase text-on-surface-variant mb-2">Type de bien</span>
-                  <select
-                    className="w-full bg-surface-container-low border-none rounded-lg text-sm focus:ring-2 focus:ring-secondary/20"
-                    onChange={(event) => updateField("asset_type", event.target.value)}
-                    value={form.asset_type}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <label className="block">
+                      <span className="block text-[10px] font-bold uppercase text-on-surface-variant mb-2">Chambres</span>
+                      <input
+                        className="w-full bg-surface-container-low border-none rounded-lg text-sm focus:ring-2 focus:ring-secondary/20"
+                        min={0}
+                        onChange={(event) => updateField("bedrooms", event.target.value)}
+                        type="number"
+                        value={form.bedrooms}
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="block text-[10px] font-bold uppercase text-on-surface-variant mb-2">Salles de bain</span>
+                      <input
+                        className="w-full bg-surface-container-low border-none rounded-lg text-sm focus:ring-2 focus:ring-secondary/20"
+                        min={0}
+                        onChange={(event) => updateField("bathrooms", event.target.value)}
+                        type="number"
+                        value={form.bathrooms}
+                      />
+                    </label>
+                  </div>
+
+                  <label className="block">
+                    <span className="block text-[10px] font-bold uppercase text-on-surface-variant mb-2">Nom de l'analyse</span>
+                    <input
+                      className="w-full bg-surface-container-low border-none rounded-lg text-sm focus:ring-2 focus:ring-secondary/20"
+                      onChange={(event) => updateField("title", event.target.value)}
+                      type="text"
+                      value={form.title}
+                    />
+                  </label>
+
+                  <label className="flex items-center gap-3 rounded-lg bg-surface-container-low px-4 py-3">
+                    <input
+                      checked={form.save_valuation}
+                      className="rounded border-outline text-secondary focus:ring-secondary"
+                      onChange={(event) => updateField("save_valuation", event.target.checked)}
+                      type="checkbox"
+                    />
+                    <span className="text-sm font-semibold text-primary">Enregistrer dans les estimations</span>
+                  </label>
+
+                  <button
+                    className="w-full bg-primary text-white py-4 rounded-lg font-headline font-extrabold tracking-tight active:scale-95 transition-transform disabled:opacity-60"
+                    disabled={isLoading}
+                    type="submit"
                   >
-                    {assetTypes.map(([value, label]) => (
-                      <option key={value} value={value}>
-                        {label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                    {isLoading ? "Calcul ML en cours..." : "Calculer l'estimation IA"}
+                  </button>
+                </form>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <label className="block">
-                    <span className="block text-[10px] font-bold uppercase text-on-surface-variant mb-2">Chambres</span>
-                    <input
-                      className="w-full bg-surface-container-low border-none rounded-lg text-sm focus:ring-2 focus:ring-secondary/20"
-                      min={0}
-                      onChange={(event) => updateField("bedrooms", event.target.value)}
-                      type="number"
-                      value={form.bedrooms}
-                    />
-                  </label>
-                  <label className="block">
-                    <span className="block text-[10px] font-bold uppercase text-on-surface-variant mb-2">Salles de bain</span>
-                    <input
-                      className="w-full bg-surface-container-low border-none rounded-lg text-sm focus:ring-2 focus:ring-secondary/20"
-                      min={0}
-                      onChange={(event) => updateField("bathrooms", event.target.value)}
-                      type="number"
-                      value={form.bathrooms}
-                    />
-                  </label>
-                </div>
-
-                <label className="block">
-                  <span className="block text-[10px] font-bold uppercase text-on-surface-variant mb-2">Nom de l'analyse</span>
-                  <input
-                    className="w-full bg-surface-container-low border-none rounded-lg text-sm focus:ring-2 focus:ring-secondary/20"
-                    onChange={(event) => updateField("title", event.target.value)}
-                    type="text"
-                    value={form.title}
-                  />
-                </label>
-
-                <label className="flex items-center gap-3 rounded-lg bg-surface-container-low px-4 py-3">
-                  <input
-                    checked={form.save_valuation}
-                    className="rounded border-outline text-secondary focus:ring-secondary"
-                    onChange={(event) => updateField("save_valuation", event.target.checked)}
-                    type="checkbox"
-                  />
-                  <span className="text-sm font-semibold text-primary">Enregistrer dans les estimations</span>
-                </label>
-
-                <button
-                  className="w-full bg-primary text-white py-4 rounded-lg font-headline font-extrabold tracking-tight active:scale-95 transition-transform disabled:opacity-60"
-                  disabled={isLoading}
-                  type="submit"
-                >
-                  {isLoading ? "Calcul ML en cours..." : "Calculer l'estimation IA"}
-                </button>
-              </form>
-
-              <div className="bg-primary-container p-8 rounded-xl text-white relative overflow-hidden">
-                <p className="text-primary-fixed text-xs font-bold uppercase mb-4">Valeur estimée</p>
-                <div className="flex items-baseline gap-2">
-                  <h3 className="text-4xl font-headline font-extrabold tracking-tighter">
-                    {estimateReady ? mainAmount.amount : "--"}
-                  </h3>
-                  <span className="text-xl font-bold opacity-60">{estimateReady ? mainAmount.unit : ""}</span>
-                </div>
-                <div className="mt-4 grid grid-cols-2 gap-3 text-sm text-on-primary-container">
-                  <div>
-                    <p className="text-[10px] opacity-70 uppercase">Fourchette basse</p>
-                    <p className="font-bold">{estimateReady ? formatMoney(result?.low_estimate, true) : "--"}</p>
+                <div className="bg-primary-container p-8 rounded-xl text-white relative overflow-hidden">
+                  <p className="text-primary-fixed text-xs font-bold uppercase mb-4">Valeur estimée</p>
+                  <div className="flex items-baseline gap-2">
+                    <h3 className="text-4xl font-headline font-extrabold tracking-tighter">
+                      {estimateReady ? mainAmount.amount : "--"}
+                    </h3>
+                    <span className="text-xl font-bold opacity-60">{estimateReady ? mainAmount.unit : ""}</span>
                   </div>
-                  <div>
-                    <p className="text-[10px] opacity-70 uppercase">Fourchette haute</p>
-                    <p className="font-bold">{estimateReady ? formatMoney(result?.high_estimate, true) : "--"}</p>
+                  <div className="mt-4 grid grid-cols-2 gap-3 text-sm text-on-primary-container">
+                    <div>
+                      <p className="text-[10px] opacity-70 uppercase">Fourchette basse</p>
+                      <p className="font-bold">{estimateReady ? formatMoney(result?.low_estimate, true) : "--"}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] opacity-70 uppercase">Fourchette haute</p>
+                      <p className="font-bold">{estimateReady ? formatMoney(result?.high_estimate, true) : "--"}</p>
+                    </div>
                   </div>
-                </div>
-                <div className="mt-8 pt-8 border-t border-white/10">
-                  <div className="flex justify-between text-[10px] opacity-80 mb-2">
-                    <span>Confiance ML</span>
-                    <span className="font-bold">{formatPercent(result?.confidence_score)}</span>
-                  </div>
-                  <div className="w-full bg-white/10 h-1 rounded-full">
-                    <div className="bg-secondary-container h-full rounded-full" style={{ width: `${Math.min(100, confidence)}%` }} />
+                  <div className="mt-8 pt-8 border-t border-white/10">
+                    <div className="flex justify-between text-[10px] opacity-80 mb-2">
+                      <span>Confiance ML</span>
+                      <span className="font-bold">{formatPercent(result?.confidence_score)}</span>
+                    </div>
+                    <div className="w-full bg-white/10 h-1 rounded-full">
+                      <div
+                        className="bg-secondary-container h-full rounded-full"
+                        style={{ width: `${Math.min(100, confidence)}%` }}
+                      />
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
 
-            <div className="xl:col-span-8 space-y-8">
-              <section className="bg-surface-container-lowest p-6 md:p-8 rounded-xl shadow-[0_12px_40px_rgba(26,28,29,0.06)]">
-                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5 mb-8">
-                  <div>
-                    <h2 className="text-lg font-headline font-bold text-primary">Modèles utilisés</h2>
-                    <p className="text-xs text-on-surface-variant">
-                      {result?.model_version ?? "ensemble_knn_ridge_baseline_v1"}
-                    </p>
-                  </div>
-                  <div className="flex flex-wrap gap-3">
-                    <DataPill label="Statut" value={statusLabels[result?.status ?? ""] ?? result?.status ?? "En attente"} />
-                    <DataPill label="Prix / m²" value={estimateReady ? formatMoney(result?.estimated_price_per_sqm) : "--"} />
-                    <DataPill label="Comparables" value={`${result?.sample_size ?? 0}`} />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-                  {(result?.models ?? []).map((model) => (
-                    <article className="bg-surface-container-low rounded-lg p-5 border border-outline-variant/10" key={model.method}>
-                      <div className="flex items-start justify-between gap-3 mb-5">
-                        <div>
-                          <h3 className="font-headline font-bold text-primary">{modelLabel(model.method)}</h3>
-                          <p className="text-[10px] uppercase font-bold text-on-surface-variant">
-                            {statusLabels[model.status] ?? model.status}
-                          </p>
-                        </div>
-                        <span className="material-symbols-outlined text-secondary">analytics</span>
-                      </div>
-                      <p className="text-2xl font-headline font-extrabold text-primary mb-1">
-                        {toNumber(model.estimated_value) > 0 ? formatMoney(model.estimated_value, true) : "--"}
+              <div className="xl:col-span-8 space-y-8">
+                <section className="bg-surface-container-lowest p-6 md:p-8 rounded-xl shadow-[0_12px_40px_rgba(26,28,29,0.06)]">
+                  <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5 mb-8">
+                    <div>
+                      <h2 className="text-lg font-headline font-bold text-primary">Modèles utilisés</h2>
+                      <p className="text-xs text-on-surface-variant">
+                        {result?.model_version ?? "ensemble_knn_ridge_baseline_v1"}
                       </p>
-                      <div className="mt-4 grid grid-cols-2 gap-3 text-xs">
-                        <DataPill label="Confiance" value={formatPercent(model.confidence_score)} />
-                        <DataPill label="Échantillon" value={`${model.sample_size}`} />
-                      </div>
-                    </article>
-                  ))}
-
-                  {!result?.models?.length && (
-                    <div className="lg:col-span-3 rounded-lg border border-dashed border-outline-variant/40 p-8 text-center text-on-surface-variant">
-                      Les modèles apparaîtront après le premier calcul.
                     </div>
-                  )}
-                </div>
-              </section>
-
-              <section className="bg-surface-container-lowest p-6 md:p-8 rounded-xl shadow-[0_12px_40px_rgba(26,28,29,0.06)]">
-                <div className="flex justify-between items-center mb-8">
-                  <div>
-                    <h2 className="text-lg font-headline font-bold text-primary">Projection à 10 ans</h2>
-                    <p className="text-xs text-on-surface-variant">Croissance simulée à partir de la valeur ML actuelle</p>
-                  </div>
-                  <span className="text-sm font-bold text-secondary">{estimateReady ? formatMoney(finalProjection?.value ?? 0, true) : "--"}</span>
-                </div>
-                <div className="relative h-[260px] w-full mt-4 flex items-end justify-between gap-4 px-2">
-                  <div className="absolute inset-0 border-b border-outline-variant/30 flex flex-col justify-between">
-                    <div className="border-t border-outline-variant/10 w-full h-0" />
-                    <div className="border-t border-outline-variant/10 w-full h-0" />
-                    <div className="border-t border-outline-variant/10 w-full h-0" />
-                    <div className="border-t border-outline-variant/10 w-full h-0" />
-                  </div>
-                  {projection.map((point, index) => (
-                    <div
-                      className={index === projection.length - 1 ? "relative z-10 flex-1 bg-on-secondary-container rounded-t-sm" : "relative z-10 flex-1 bg-secondary/80 rounded-t-sm"}
-                      key={point.label}
-                      style={{ height: `${estimateReady ? point.height : 12}%` }}
-                      title={`${point.label}: ${formatMoney(point.value)}`}
-                    >
-                      <span className="absolute -bottom-6 left-1/2 -translate-x-1/2 text-[10px] font-bold opacity-70">{point.label}</span>
+                    <div className="flex flex-wrap gap-3">
+                      <DataPill
+                        label="Statut"
+                        value={statusLabels[result?.status ?? ""] ?? result?.status ?? "En attente"}
+                      />
+                      <DataPill
+                        label="Prix / m²"
+                        value={estimateReady ? formatMoney(result?.estimated_price_per_sqm) : "--"}
+                      />
+                      <DataPill label="Comparables" value={`${result?.sample_size ?? 0}`} />
                     </div>
-                  ))}
-                </div>
-              </section>
+                  </div>
 
-              <section className="space-y-5">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-lg font-headline font-bold text-primary">Comparables depuis la base</h2>
-                  <span className="px-3 py-1 bg-surface-container-high rounded-full text-[10px] font-bold text-on-surface-variant">
-                    {result?.comparables?.length ?? 0} biens trouvés
-                  </span>
-                </div>
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-                  {(result?.comparables ?? []).slice(0, 6).map((comparable) => (
-                    <article className="bg-surface-container-lowest rounded-xl overflow-hidden shadow-sm border border-outline-variant/10" key={`${comparable.source}-${comparable.id ?? comparable.external_url}`}>
-                      <div className="aspect-[16/10] bg-surface-container-low">
-                        {comparable.primary_image_url ? (
-                          <img
-                            alt={comparable.title || "Comparable"}
-                            className="h-full w-full object-cover"
-                            src={comparable.primary_image_url}
-                          />
-                        ) : (
-                          <div className="h-full w-full bg-gradient-to-br from-primary to-secondary text-white p-5 flex flex-col justify-between">
-                            <span className="text-[10px] uppercase tracking-[0.22em] font-bold opacity-75">{comparable.source}</span>
-                            <div>
-                              <p className="text-2xl font-headline font-extrabold">{comparable.city || "Maroc"}</p>
-                              <p className="text-sm opacity-80">{comparable.district || "Comparable marché"}</p>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                      <div className="p-5">
-                        <div className="flex items-start justify-between gap-4 mb-4">
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+                    {(result?.models ?? []).map((model) => (
+                      <article
+                        className="bg-surface-container-low rounded-lg p-5 border border-outline-variant/10"
+                        key={model.method}
+                      >
+                        <div className="flex items-start justify-between gap-3 mb-5">
                           <div>
-                            <h3 className="font-headline font-bold text-primary line-clamp-2">{comparable.title || "Annonce marché"}</h3>
+                            <h3 className="font-headline font-bold text-primary">{modelLabel(model.method)}</h3>
                             <p className="text-[10px] uppercase font-bold text-on-surface-variant">
-                              {comparable.source} · {comparable.city || "Maroc"} {comparable.district ? `· ${comparable.district}` : ""}
+                              {statusLabels[model.status] ?? model.status}
                             </p>
                           </div>
-                          <span className="rounded-full bg-secondary-container px-3 py-1 text-[10px] font-bold text-secondary">
-                            {formatPercent(toNumber(comparable.similarity_score) * 100)}
-                          </span>
+                          <span className="material-symbols-outlined text-secondary">analytics</span>
                         </div>
-                        <div className="grid grid-cols-3 gap-3 text-xs">
-                          <DataPill label="Prix" value={formatMoney(comparable.price, true)} />
-                          <DataPill label="Surface" value={`${toNumber(comparable.area_sqm).toLocaleString("fr-MA", { maximumFractionDigits: 0 })} m²`} />
-                          <DataPill label="MAD / m²" value={formatMoney(comparable.price_per_sqm)} />
+                        <p className="text-2xl font-headline font-extrabold text-primary mb-1">
+                          {toNumber(model.estimated_value) > 0 ? formatMoney(model.estimated_value, true) : "--"}
+                        </p>
+                        <div className="mt-4 grid grid-cols-2 gap-3 text-xs">
+                          <DataPill label="Confiance" value={formatPercent(model.confidence_score)} />
+                          <DataPill label="Échantillon" value={`${model.sample_size}`} />
                         </div>
-                      </div>
-                    </article>
-                  ))}
+                      </article>
+                    ))}
 
-                  {result && result.comparables.length === 0 && (
-                    <div className="lg:col-span-2 rounded-xl border border-dashed border-outline-variant/40 p-8 text-center text-on-surface-variant">
-                      Aucun comparable direct pour ces paramètres. Le moteur utilisera les autres modèles disponibles.
+                    {!result?.models?.length && (
+                      <div className="lg:col-span-3 rounded-lg border border-dashed border-outline-variant/40 p-8 text-center text-on-surface-variant">
+                        Les modèles apparaîtront après le premier calcul.
+                      </div>
+                    )}
+                  </div>
+                </section>
+
+                <section className="bg-surface-container-lowest p-6 md:p-8 rounded-xl shadow-[0_12px_40px_rgba(26,28,29,0.06)]">
+                  <div className="flex justify-between items-center mb-8">
+                    <div>
+                      <h2 className="text-lg font-headline font-bold text-primary">Projection à 10 ans</h2>
+                      <p className="text-xs text-on-surface-variant">
+                        Croissance simulée à partir de la valeur ML actuelle
+                      </p>
                     </div>
-                  )}
-                </div>
-              </section>
-            </div>
-          </section>
+                    <span className="text-sm font-bold text-secondary">
+                      {estimateReady ? formatMoney(finalProjection?.value ?? 0, true) : "--"}
+                    </span>
+                  </div>
+                  <div className="relative h-[260px] w-full mt-4 flex items-end justify-between gap-4 px-2">
+                    <div className="absolute inset-0 border-b border-outline-variant/30 flex flex-col justify-between">
+                      <div className="border-t border-outline-variant/10 w-full h-0" />
+                      <div className="border-t border-outline-variant/10 w-full h-0" />
+                      <div className="border-t border-outline-variant/10 w-full h-0" />
+                      <div className="border-t border-outline-variant/10 w-full h-0" />
+                    </div>
+                    {projection.map((point, index) => (
+                      <div
+                        className={
+                          index === projection.length - 1
+                            ? "relative z-10 flex-1 bg-on-secondary-container rounded-t-sm"
+                            : "relative z-10 flex-1 bg-secondary/80 rounded-t-sm"
+                        }
+                        key={point.label}
+                        style={{ height: `${estimateReady ? point.height : 12}%` }}
+                        title={`${point.label}: ${formatMoney(point.value)}`}
+                      >
+                        <span className="absolute -bottom-6 left-1/2 -translate-x-1/2 text-[10px] font-bold opacity-70">
+                          {point.label}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+
+                <section className="space-y-5">
+                  <div className="flex items-center justify-between">
+                    <h2 className="text-lg font-headline font-bold text-primary">Comparables depuis la base</h2>
+                    <span className="px-3 py-1 bg-surface-container-high rounded-full text-[10px] font-bold text-on-surface-variant">
+                      {result?.comparables?.length ?? 0} biens trouvés
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                    {(result?.comparables ?? []).slice(0, 6).map((comparable) => (
+                      <article
+                        className="bg-surface-container-lowest rounded-xl overflow-hidden shadow-sm border border-outline-variant/10"
+                        key={`${comparable.source}-${comparable.id ?? comparable.external_url}`}
+                      >
+                        <div className="aspect-[16/10] bg-surface-container-low">
+                          {comparable.primary_image_url ? (
+                            <img
+                              alt={comparable.title || "Comparable"}
+                              className="h-full w-full object-cover"
+                              src={comparable.primary_image_url}
+                            />
+                          ) : (
+                            <div className="h-full w-full bg-gradient-to-br from-primary to-secondary text-white p-5 flex flex-col justify-between">
+                              <span className="text-[10px] uppercase tracking-[0.22em] font-bold opacity-75">
+                                {comparable.source}
+                              </span>
+                              <div>
+                                <p className="text-2xl font-headline font-extrabold">{comparable.city || "Maroc"}</p>
+                                <p className="text-sm opacity-80">{comparable.district || "Comparable marché"}</p>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                        <div className="p-5">
+                          <div className="flex items-start justify-between gap-4 mb-4">
+                            <div>
+                              <h3 className="font-headline font-bold text-primary line-clamp-2">
+                                {comparable.title || "Annonce marché"}
+                              </h3>
+                              <p className="text-[10px] uppercase font-bold text-on-surface-variant">
+                                {comparable.source} · {comparable.city || "Maroc"}{" "}
+                                {comparable.district ? `· ${comparable.district}` : ""}
+                              </p>
+                            </div>
+                            <span className="rounded-full bg-secondary-container px-3 py-1 text-[10px] font-bold text-secondary">
+                              {formatPercent(toNumber(comparable.similarity_score) * 100)}
+                            </span>
+                          </div>
+                          <div className="grid grid-cols-3 gap-3 text-xs">
+                            <DataPill label="Prix" value={formatMoney(comparable.price, true)} />
+                            <DataPill
+                              label="Surface"
+                              value={`${toNumber(comparable.area_sqm).toLocaleString("fr-MA", {
+                                maximumFractionDigits: 0,
+                              })} m²`}
+                            />
+                            <DataPill label="MAD / m²" value={formatMoney(comparable.price_per_sqm)} />
+                          </div>
+                        </div>
+                      </article>
+                    ))}
+
+                    {result && result.comparables.length === 0 && (
+                      <div className="lg:col-span-2 rounded-xl border border-dashed border-outline-variant/40 p-8 text-center text-on-surface-variant">
+                        Aucun comparable direct pour ces paramètres. Le moteur utilisera les autres modèles disponibles.
+                      </div>
+                    )}
+                  </div>
+                </section>
+              </div>
+            </section>
+          )}
         </main>
       </div>
     </ImportedPageDocument>

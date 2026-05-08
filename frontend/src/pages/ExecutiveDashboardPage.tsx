@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import ImportedPageDocument from "../components/ImportedPageDocument";
+import { DashboardPageLoader } from "../components/LoadingState";
 import { useAuth } from "../auth/AuthContext";
 import { apiRequest, getErrorMessage } from "../lib/api";
 
@@ -165,37 +166,30 @@ export default function ExecutiveDashboardPage() {
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    let isMounted = true;
+  const loadDashboard = useCallback(async () => {
+    setIsLoading(true);
+    setError("");
 
-    async function loadDashboard() {
-      setIsLoading(true);
-      setError("");
-
-      try {
-        const payload = await apiRequest<DashboardOverview>("/dashboard/overview/", { token });
-        if (isMounted) {
-          setDashboard({ ...emptyDashboard, ...payload });
-        }
-      } catch (requestError) {
-        if (isMounted) {
-          setError(getErrorMessage(requestError, "Impossible de charger le dashboard."));
-        }
-      } finally {
-        if (isMounted) {
-          setIsLoading(false);
-        }
-      }
+    try {
+      const payload = await apiRequest<DashboardOverview>("/dashboard/overview/", { token });
+      setDashboard({ ...emptyDashboard, ...payload });
+    } catch (requestError) {
+      setError(getErrorMessage(requestError, "Impossible de charger le dashboard."));
+    } finally {
+      setIsLoading(false);
     }
+  }, [token]);
 
+  useEffect(() => {
     void loadDashboard();
-    const interval = window.setInterval(loadDashboard, 120000);
+    const interval = window.setInterval(() => {
+      void loadDashboard();
+    }, 120000);
 
     return () => {
-      isMounted = false;
       window.clearInterval(interval);
     };
-  }, [token]);
+  }, [loadDashboard]);
 
   const performanceScore = useMemo(() => {
     const occupancy = dashboard.average_occupancy_rate || 0;
@@ -211,6 +205,7 @@ export default function ExecutiveDashboardPage() {
           label: ["Jan", "Fev", "Mar", "Avr", "Mai", "Juin", "Juil", "Aout", "Sep", "Oct", "Nov", "Dec"][index],
           value: 0,
         }));
+  const isInitialLoading = isLoading && dashboard.refreshed_at === "" && !error;
 
   return (
     <ImportedPageDocument
@@ -219,17 +214,23 @@ export default function ExecutiveDashboardPage() {
       styles={pageStyles}
     >
       <div>
-        <header className="fixed top-0 left-0 right-0 z-50 bg-[#f9f9fb] shadow-[0_12px_40px_rgba(26,28,29,0.06)] border-b border-opacity-10 h-16 flex items-center px-8 justify-between">
-          <div className="flex items-center gap-8">
-            <span className="text-xl font-bold tracking-tighter text-[#1A237E] uppercase font-headline">SmartEstate</span>
-            <div className="hidden md:flex gap-6">
-              <a className="text-[#1A237E] font-semibold border-b-2 border-[#1b6d24] font-['Manrope'] tracking-tight" href="/tableau-de-bord-executif">Tableau de Bord</a>
-              <a className="text-[#454652] font-medium hover:text-[#1b6d24] transition-colors duration-300 font-['Manrope'] tracking-tight" href="/portfolio-immobilier-maroc">Portfolio</a>
-              <a className="text-[#454652] font-medium hover:text-[#1b6d24] transition-colors duration-300 font-['Manrope'] tracking-tight" href="/estimation-immobiliere-ia">Estimation IA</a>
-            </div>
+        <header className="fixed top-0 left-0 right-0 z-50 bg-[#f9f9fb] shadow-[0_12px_40px_rgba(26,28,29,0.06)] border-b border-opacity-10 h-16 flex items-center px-6 md:px-8 justify-between">
+          <div className="hidden sm:flex items-center gap-3 text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
+            <span className="material-symbols-outlined text-secondary text-base">monitoring</span>
+            <span>Données backend live</span>
           </div>
           <div className="flex items-center gap-4">
-            <span className="material-symbols-outlined text-on-surface-variant p-2">sync</span>
+            <button
+              className="inline-flex items-center gap-2 rounded-lg bg-surface-container-low px-4 py-2 text-sm font-semibold text-primary transition-colors hover:bg-surface-container disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={isLoading}
+              onClick={() => void loadDashboard()}
+              type="button"
+            >
+              <span className={isLoading ? "material-symbols-outlined animate-spin" : "material-symbols-outlined"}>
+                sync
+              </span>
+              <span>{isLoading ? "Actualisation..." : "Actualiser"}</span>
+            </button>
             <span className="hidden sm:inline text-xs font-semibold text-on-surface-variant">
               {isLoading ? "Chargement..." : formatDate(dashboard.refreshed_at)}
             </span>
@@ -277,6 +278,10 @@ export default function ExecutiveDashboardPage() {
         </aside>
 
         <main className="md:ml-72 pt-24 px-8 pb-12 min-h-screen">
+          {isInitialLoading ? (
+            <DashboardPageLoader cardCount={4} metricCount={3} sidePanelCount={1} />
+          ) : (
+            <>
           <header className="mb-10 flex flex-col md:flex-row md:items-end justify-between gap-6">
             <div>
               <p className="text-on-surface-variant text-sm font-semibold uppercase tracking-widest mb-1">Vue d'ensemble du marche marocain</p>
@@ -314,7 +319,6 @@ export default function ExecutiveDashboardPage() {
                 label="Cash-flow Mensuel"
                 value={formatMoney(dashboard.monthly_cashflow, false)}
                 sublabel={`Rendement net: ${formatPercent(dashboard.average_annual_yield)}`}
-                tone="primary"
               />
               <MetricCard
                 icon="analytics"
@@ -450,6 +454,8 @@ export default function ExecutiveDashboardPage() {
               </div>
             </div>
           </section>
+            </>
+          )}
         </main>
       </div>
     </ImportedPageDocument>

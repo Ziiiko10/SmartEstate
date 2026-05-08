@@ -1,5 +1,6 @@
 import { startTransition, useDeferredValue, useEffect, useState } from "react";
 import ImportedPageDocument from "../components/ImportedPageDocument";
+import { DashboardPageLoader } from "../components/LoadingState";
 import { useAuth } from "../auth/AuthContext";
 import { apiRequest, getErrorMessage } from "../lib/api";
 
@@ -175,7 +176,7 @@ export default function PortfolioMarocPage() {
           apiRequest<Portfolio[]>("/portfolios/", { token }),
           apiRequest<Holding[]>("/holdings/", { token }),
           apiRequest<Asset[]>("/assets/", { token }),
-          apiRequest<MarketListing[]>("/market-listings/?transaction_type=sale", { token }),
+          apiRequest<MarketListing[]>("/market-listings/?transaction_type=sale&limit=30", { token }),
           apiRequest<DashboardOverview>("/dashboard/overview/", { token }),
         ]);
 
@@ -230,6 +231,13 @@ export default function PortfolioMarocPage() {
       .toLowerCase()
       .includes(deferredQuery);
   });
+  const isInitialLoading =
+    isLoading &&
+    portfolios.length === 0 &&
+    holdings.length === 0 &&
+    assets.length === 0 &&
+    marketListings.length === 0 &&
+    !error;
 
   return (
     <ImportedPageDocument
@@ -276,6 +284,12 @@ export default function PortfolioMarocPage() {
         </aside>
 
         <main className="ml-72 min-h-screen">
+          {isInitialLoading ? (
+            <div className="px-8 py-8">
+              <DashboardPageLoader cardCount={6} metricCount={4} sidePanelCount={2} />
+            </div>
+          ) : (
+            <>
           <header className="flex justify-between items-center px-8 py-4 w-full sticky top-0 bg-[#f9f9fb]/80 backdrop-blur-md z-40">
             <div className="flex items-center gap-4">
               <div className="relative">
@@ -504,6 +518,8 @@ export default function PortfolioMarocPage() {
               </div>
             )}
           </section>
+            </>
+          )}
         </main>
       </div>
     </ImportedPageDocument>

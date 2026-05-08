@@ -1,6 +1,7 @@
 import type { PropsWithChildren } from "react";
 import { Navigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
+import { AppLoadingScreen } from "./LoadingState";
 
 type GuestRouteProps = PropsWithChildren<{
   redirectTo?: string;
@@ -13,14 +14,7 @@ export default function GuestRoute({
   const { isAuthenticated, isBootstrapping } = useAuth();
 
   if (isBootstrapping) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-background px-6 text-center text-on-surface">
-        <div>
-          <p className="font-headline text-3xl font-bold text-primary">SmartEstate</p>
-          <p className="mt-3 text-sm text-on-surface-variant">Chargement de votre session...</p>
-        </div>
-      </div>
-    );
+    return <AppLoadingScreen message="Chargement de votre session..." subtitle="Préparation des écrans d'accès SmartEstate." />;
   }
 
   if (isAuthenticated) {

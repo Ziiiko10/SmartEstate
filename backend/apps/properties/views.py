@@ -1,6 +1,7 @@
 from decimal import Decimal, InvalidOperation
 
 from django.db.models import Q
+from rest_framework.response import Response
 from rest_framework import viewsets
 
 from smartestate_backend.access import visible_organizations
@@ -33,7 +34,7 @@ class MarketListingViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = MarketListingSerializer
 
     def get_queryset(self):
-        queryset = MarketListing.objects.all()
+        queryset = MarketListing.objects.all().order_by("-last_seen_at", "-id")
 
         source = self.request.query_params.get("source")
         city = self.request.query_params.get("city")
@@ -44,7 +45,7 @@ class MarketListingViewSet(viewsets.ReadOnlyModelViewSet):
         if source:
             queryset = queryset.filter(source=source)
         if city:
-            queryset = queryset.filter(city__iexact=city)
+            queryset = queryset.filter(city__icontains=city)
         if asset_type:
             queryset = queryset.filter(asset_type=asset_type)
         if transaction_type:
@@ -66,6 +67,42 @@ class MarketListingViewSet(viewsets.ReadOnlyModelViewSet):
 
         return queryset
 
+    def list(self, request, *args, **kwargs):
+        queryset = self.filter_queryset(self.get_queryset())
+
+        page = self._int_query_param("page", minimum=1)
+        page_size = self._int_query_param("page_size", minimum=1, maximum=100)
+        limit = self._int_query_param("limit", minimum=1, maximum=200)
+        offset = self._int_query_param("offset", minimum=0)
+
+        if page is not None or page_size is not None:
+            current_page = page or 1
+            current_page_size = page_size or limit or 24
+            start = (current_page - 1) * current_page_size
+            end = start + current_page_size
+            total = queryset.count()
+            serializer = self.get_serializer(queryset[start:end], many=True)
+            has_next = end < total
+            has_previous = start > 0
+            return Response(
+                {
+                    "count": total,
+                    "next_page": current_page + 1 if has_next else None,
+                    "page": current_page,
+                    "page_size": current_page_size,
+                    "previous_page": current_page - 1 if has_previous else None,
+                    "results": serializer.data,
+                }
+            )
+
+        if limit is not None or offset is not None:
+            start = offset or 0
+            end = start + (limit or 24)
+            queryset = queryset[start:end]
+
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+
     def _decimal_query_param(self, name):
         value = self.request.query_params.get(name)
         if not value:
@@ -74,3 +111,18 @@ class MarketListingViewSet(viewsets.ReadOnlyModelViewSet):
             return Decimal(value)
         except (InvalidOperation, TypeError):
             return None
+
+    def _int_query_param(self, name, *, minimum=None, maximum=None):
+        value = self.request.query_params.get(name)
+        if value in (None, ""):
+            return None
+        try:
+            parsed = int(value)
+        except (TypeError, ValueError):
+            return None
+
+        if minimum is not None:
+            parsed = max(minimum, parsed)
+        if maximum is not None:
+            parsed = min(maximum, parsed)
+        return parsed

@@ -46,6 +46,75 @@ body {
   min-height: 100vh;
 }
 
+.smartestate-loader-surface {
+  border: 1px solid rgba(23, 32, 58, 0.08);
+  background: rgba(255, 255, 255, 0.86);
+  backdrop-filter: blur(18px);
+}
+
+.smartestate-loader-bar {
+  width: 38%;
+  animation: smartestateLoaderBar 1.15s ease-in-out infinite;
+}
+
+.smartestate-route-loader {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 28px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 180ms ease;
+}
+
+.smartestate-route-loader-visible {
+  opacity: 1;
+}
+
+.smartestate-route-loader::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: rgba(249, 249, 251, 0.38);
+  backdrop-filter: blur(4px);
+}
+
+.smartestate-route-loader-inner {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 48px;
+  padding: 0 20px;
+  border-radius: 999px;
+  border: 1px solid rgba(23, 32, 58, 0.08);
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 18px 32px rgba(23, 32, 58, 0.08);
+}
+
+.smartestate-skeleton {
+  position: relative;
+  overflow: hidden;
+  background: rgba(222, 227, 234, 0.78);
+}
+
+.smartestate-skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.7) 48%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  animation: smartestateShimmer 1.35s ease-in-out infinite;
+}
+
 .smartestate-dashboard-shell {
   --smartestate-sidebar-width: 18rem;
   min-height: 100vh;
@@ -1723,5 +1792,22 @@ svg {
 @media (max-width: 768px) {
   .page-catalog-page {
     padding-top: 4rem;
+  }
+}
+
+@keyframes smartestateShimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes smartestateLoaderBar {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+
+  50% {
+    transform: translateX(160%);
   }
 }

@@ -1,7 +1,8 @@
 from decimal import Decimal
 from http.client import IncompleteRead
 
-from django.test import SimpleTestCase
+from django.test import SimpleTestCase, TestCase
+from django.utils import timezone
 
 from apps.properties.etl.scrapers import (
     AvitoScraper,
@@ -10,6 +11,7 @@ from apps.properties.etl.scrapers import (
     ScrapedListing,
     parse_price,
 )
+from apps.properties.models import MarketListing
 
 
 class MarketListingParserTests(SimpleTestCase):
@@ -147,3 +149,45 @@ class IncrementalTestScraper(BaseMarketScraper):
 
     def parse_listing(self, html: str, url: str, title_hint: str = "") -> ScrapedListing:
         return ScrapedListing(source=self.source, url=url, title=title_hint)
+
+
+class MarketListingApiTests(TestCase):
+    def setUp(self):
+        now = timezone.now()
+        for index in range(3):
+            MarketListing.objects.create(
+                source=MarketListing.Source.AVITO,
+                source_id=str(index + 1),
+                external_url=f"https://example.com/listing-{index + 1}",
+                title=f"Listing {index + 1}",
+                description="Annonce de test",
+                asset_type=MarketListing.AssetType.APARTMENT,
+                transaction_type=MarketListing.TransactionType.SALE,
+                city="Casablanca",
+                district="Maarif",
+                price=Decimal("1000000.00") + Decimal(index * 100000),
+                area_sqm=Decimal("100.00"),
+                scraped_at=now,
+                last_seen_at=now,
+                raw_payload={"images": [f"https://images.example.com/{index + 1}.jpg"]},
+            )
+
+    def test_market_listings_limit_keeps_array_shape(self):
+        response = self.client.get("/api/market-listings/?limit=2")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertIsInstance(payload, list)
+        self.assertEqual(len(payload), 2)
+
+    def test_market_listings_page_returns_paginated_payload(self):
+        response = self.client.get("/api/market-listings/?page=2&page_size=1")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["count"], 3)
+        self.assertEqual(payload["page"], 2)
+        self.assertEqual(payload["page_size"], 1)
+        self.assertEqual(payload["previous_page"], 1)
+        self.assertEqual(payload["next_page"], 3)
+        self.assertEqual(len(payload["results"]), 1)

@@ -1,336 +1,638 @@
+import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import ImportedPageDocument from "../components/ImportedPageDocument";
+import { DashboardPageLoader } from "../components/LoadingState";
+import { useAuth } from "../auth/AuthContext";
+import { apiRequest, getErrorMessage } from "../lib/api";
 
 const pageStyles = `.material-symbols-outlined {
             font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
-        }
-        body { font-family: 'Manrope', sans-serif; background-color: #f9f9fb; color: #1a1c1d; }
-        .no-scrollbar::-webkit-scrollbar { display: none; }
-        .chart-bar-casa { background-color: rgba(27, 109, 36, 0.2); border-top: 2px solid #1b6d24; }
-        .chart-bar-marrakech { background-color: rgba(26, 35, 126, 0.2); border-top: 2px solid #1a237e; }`;
+            vertical-align: middle;
+        }`;
+
+type ApiNumber = number | string | null;
+
+type GrowthPoint = {
+  height_percent: number;
+  label: string;
+  value: number;
+};
+
+type MarketCity = {
+  average_price?: ApiNumber;
+  city: string;
+  listing_count?: number;
+};
+
+type DashboardOverview = {
+  average_annual_yield: number;
+  growth_series: GrowthPoint[];
+  market_cities: MarketCity[];
+  recommendations_open: number;
+  refreshed_at: string;
+  reports: number;
+  scenarios: number;
+  total_asset_value: number;
+};
+
+type ReportRecord = {
+  asset_name: string | null;
+  created_at: string;
+  file_url: string;
+  generated_by_name: string | null;
+  id: number;
+  metadata: Record<string, unknown>;
+  organization_name: string;
+  portfolio_name: string | null;
+  report_type: string;
+  status: string;
+  summary: string;
+  title: string;
+};
+
+type ValuationRecord = {
+  asset_name: string | null;
+  confidence_score: ApiNumber;
+  created_at: string;
+  estimated_value: ApiNumber;
+  high_estimate: ApiNumber;
+  id: number;
+  low_estimate: ApiNumber;
+  model_version: string;
+  organization_name: string;
+  summary: string;
+  title: string;
+};
+
+const emptyOverview: DashboardOverview = {
+  average_annual_yield: 0,
+  growth_series: [],
+  market_cities: [],
+  recommendations_open: 0,
+  refreshed_at: "",
+  reports: 0,
+  scenarios: 0,
+  total_asset_value: 0,
+};
+
+function toNumber(value: ApiNumber | undefined) {
+  if (value === null || value === undefined || value === "") {
+    return 0;
+  }
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function formatMoney(value: ApiNumber | undefined, compact = false) {
+  const amount = toNumber(value);
+  if (compact && Math.abs(amount) >= 1_000_000) {
+    return `${(amount / 1_000_000).toLocaleString("fr-MA", {
+      maximumFractionDigits: 2,
+      minimumFractionDigits: 1,
+    })} MDH`;
+  }
+
+  return `${amount.toLocaleString("fr-MA", {
+    maximumFractionDigits: 0,
+  })} MAD`;
+}
+
+function formatPercent(value: ApiNumber | undefined) {
+  return `${toNumber(value).toLocaleString("fr-MA", {
+    maximumFractionDigits: 1,
+    minimumFractionDigits: 1,
+  })}%`;
+}
+
+function formatDate(value: string) {
+  if (!value) {
+    return "N/A";
+  }
+
+  return new Intl.DateTimeFormat("fr-MA", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(value));
+}
+
+function reportTypeLabel(value: string) {
+  const labels: Record<string, string> = {
+    financial: "Financier",
+    market: "Marché",
+    portfolio: "Portfolio",
+    risk: "Risque",
+  };
+  return labels[value] ?? value;
+}
+
+function reportStatusLabel(value: string) {
+  const labels: Record<string, string> = {
+    archived: "Archivé",
+    generating: "Génération",
+    ready: "Prêt",
+  };
+  return labels[value] ?? value;
+}
+
+function suggestionText(report: ReportRecord) {
+  if (report.summary) {
+    return report.summary;
+  }
+
+  const parts = [
+    report.portfolio_name ? `Portfolio ${report.portfolio_name}` : "",
+    report.asset_name ? `Actif ${report.asset_name}` : "",
+    report.organization_name ? `Organisation ${report.organization_name}` : "",
+  ].filter(Boolean);
+
+  return parts.length > 0
+    ? parts.join(" · ")
+    : "Rapport généré depuis les données de la plateforme SmartEstate.";
+}
 
 export default function ReportsPage() {
+  const { token } = useAuth();
+  const [overview, setOverview] = useState<DashboardOverview>(emptyOverview);
+  const [reports, setReports] = useState<ReportRecord[]>([]);
+  const [valuations, setValuations] = useState<ValuationRecord[]>([]);
+  const [query, setQuery] = useState("");
+  const [selectedType, setSelectedType] = useState("all");
+  const [selectedStatus, setSelectedStatus] = useState("all");
+  const [error, setError] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadPage() {
+      setIsLoading(true);
+      setError("");
+
+      try {
+        const [overviewPayload, reportPayload, valuationPayload] = await Promise.all([
+          apiRequest<DashboardOverview>("/dashboard/overview/", { token }),
+          apiRequest<ReportRecord[]>("/reports/", { token }),
+          apiRequest<ValuationRecord[]>("/valuations/", { token }),
+        ]);
+
+        if (!active) {
+          return;
+        }
+
+        setOverview({ ...emptyOverview, ...overviewPayload });
+        setReports(reportPayload);
+        setValuations(valuationPayload);
+      } catch (requestError) {
+        if (!active) {
+          return;
+        }
+        setError(getErrorMessage(requestError, "Impossible de charger les rapports et analyses."));
+      } finally {
+        if (active) {
+          setIsLoading(false);
+        }
+      }
+    }
+
+    void loadPage();
+    return () => {
+      active = false;
+    };
+  }, [token]);
+
+  const filteredReports = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase();
+
+    return reports.filter((report) => {
+      if (selectedType !== "all" && report.report_type !== selectedType) {
+        return false;
+      }
+      if (selectedStatus !== "all" && report.status !== selectedStatus) {
+        return false;
+      }
+      if (!normalizedQuery) {
+        return true;
+      }
+
+      return [
+        report.title,
+        report.summary,
+        report.organization_name,
+        report.asset_name ?? "",
+        report.portfolio_name ?? "",
+      ]
+        .join(" ")
+        .toLowerCase()
+        .includes(normalizedQuery);
+    });
+  }, [query, reports, selectedStatus, selectedType]);
+
+  const filteredValuations = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase();
+    if (!normalizedQuery) {
+      return valuations;
+    }
+
+    return valuations.filter((valuation) =>
+      [valuation.title, valuation.summary, valuation.organization_name, valuation.asset_name ?? ""]
+        .join(" ")
+        .toLowerCase()
+        .includes(normalizedQuery),
+    );
+  }, [query, valuations]);
+
+  const growthSeries =
+    overview.growth_series.length > 0
+      ? overview.growth_series
+      : [
+          { height_percent: 18, label: "Jan", value: 0 },
+          { height_percent: 22, label: "Mar", value: 0 },
+          { height_percent: 28, label: "Mai", value: 0 },
+          { height_percent: 34, label: "Juil", value: 0 },
+          { height_percent: 42, label: "Sep", value: 0 },
+          { height_percent: 48, label: "Nov", value: 0 },
+        ];
+  const isInitialLoading =
+    isLoading &&
+    reports.length === 0 &&
+    valuations.length === 0 &&
+    overview.refreshed_at === "" &&
+    !error;
+
   return (
     <ImportedPageDocument
-      bodyClassName="flex"
-      title="SmartEstate - Rapports & Analyses"
+      bodyClassName="bg-background font-body text-on-surface antialiased"
+      title="SmartEstate | Rapports"
       styles={pageStyles}
     >
-      <div>
-  {/* SideNavBar */}
-  <aside className="fixed left-0 top-0 h-full w-64 z-50 bg-white flex flex-col py-8 border-r border-slate-200/50 font-medium">
-    <div className="px-6 mb-10">
-      <h1 className="text-2xl font-black text-primary tracking-tight">SmartEstate</h1>
-    </div>
-    <nav className="flex-1 space-y-1">
-      <a className="flex items-center gap-3 text-slate-500 px-6 py-3 hover:bg-slate-50 transition-all duration-300" href="#">
-        <span className="material-symbols-outlined text-[22px]">dashboard</span>
-        <span className="text-sm">Tableau de Bord</span>
-      </a>
-      <a className="flex items-center gap-3 text-slate-500 px-6 py-3 hover:bg-slate-50 transition-all duration-300" href="#">
-        <span className="material-symbols-outlined text-[22px]">domain</span>
-        <span className="text-sm">Portfolio</span>
-      </a>
-      <a className="flex items-center gap-3 text-slate-500 px-6 py-3 hover:bg-slate-50 transition-all duration-300" href="#">
-        <span className="material-symbols-outlined text-[22px]">calculate</span>
-        <span className="text-sm">Estimation</span>
-      </a>
-      <a className="flex items-center gap-3 text-slate-500 px-6 py-3 hover:bg-slate-50 transition-all duration-300" href="#">
-        <span className="material-symbols-outlined text-[22px]">insights</span>
-        <span className="text-sm">Scénarios</span>
-      </a>
-      <a className="flex items-center gap-3 text-slate-500 px-6 py-3 hover:bg-slate-50 transition-all duration-300" href="#">
-        <span className="material-symbols-outlined text-[22px]">auto_awesome</span>
-        <span className="text-sm">Recommandations</span>
-      </a>
-      {/* Active Tab: Rapports */}
-      <a className="flex items-center gap-3 text-secondary bg-secondary/5 border-r-4 border-secondary px-6 py-3" href="#">
-        <span className="material-symbols-outlined text-[22px]" style={{fontVariationSettings: '"FILL" 1'}}>assessment</span>
-        <span className="text-sm font-bold">Rapports</span>
-      </a>
-      <a className="flex items-center gap-3 text-slate-500 px-6 py-3 hover:bg-slate-50 transition-all duration-300" href="#">
-        <span className="material-symbols-outlined text-[22px]">group</span>
-        <span className="text-sm">Équipe</span>
-      </a>
-    </nav>
-    <div className="mt-auto px-6 space-y-4">
-      <button className="w-full bg-secondary text-on-secondary py-3 rounded-lg font-bold flex items-center justify-center gap-2 hover:opacity-95 transition-opacity shadow-sm">
-        <span className="material-symbols-outlined text-lg">add</span>
-        <span className="text-sm">Nouvelle Analyse</span>
-      </button>
-      <div className="pt-4 border-t border-slate-100">
-        <a className="flex items-center gap-3 text-slate-500 py-2 hover:text-secondary transition-colors" href="#">
-          <span className="material-symbols-outlined text-xl">help</span>
-          <span className="text-xs">Aide</span>
-        </a>
-        <a className="flex items-center gap-3 text-slate-500 py-2 hover:text-secondary transition-colors" href="#">
-          <span className="material-symbols-outlined text-xl">headset_mic</span>
-          <span className="text-xs">Support</span>
-        </a>
-      </div>
-      <div className="flex items-center gap-3 mt-6 pt-6 border-t border-slate-100">
-        <div className="w-10 h-10 rounded-full bg-primary-container/10 overflow-hidden border border-slate-100">
-          <img alt="Yassine Mansouri" src="https://lh3.googleusercontent.com/aida-public/AB6AXuC1armMelmf14tDTXp8Bq5XSLGrs1kYVkBJygSoeZ-L7OmDo8DWUCbITdvxi6MEU3BkpDbnrPGH6ctxXsk9sFX3t4EDk0v4CJZlgcfauN_KiDNWmWsHsmXhvbOG0ircNf6mrG8rqCnx-cougIZ5XljJq7ZcsaGHQe2EcVjmlVD41qi1nqvIgn7UAJOJGTnOmXG5EK7GFRpgBeqgyqCkSWBV4fN4LHvtVu8sfCMgxYbGc1vdFKvaHy-0O-lXSNVuaF48Kz7SZD5WDX3N" />
-        </div>
-        <div>
-          <p className="text-xs font-bold text-primary">Yassine Mansouri</p>
-          <p className="text-[10px] text-slate-500 uppercase tracking-wider font-bold">Administrateur</p>
-        </div>
-      </div>
-    </div>
-  </aside>
-  {/* Main Content */}
-  <main className="ml-64 flex-1 min-h-screen bg-background">
-    {/* TopAppBar */}
-    <header className="fixed top-0 right-0 left-64 z-40 bg-white/80 backdrop-blur-xl border-b border-slate-200/50 h-20 flex items-center justify-between px-10">
-      <div className="flex items-center gap-6 flex-1">
-        <div className="relative w-full max-w-md">
-          <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">search</span>
-          <input className="w-full pl-10 pr-4 py-2 bg-surface-container-low rounded-lg border-none focus:ring-2 focus:ring-secondary/20 text-sm" placeholder="Rechercher un rapport ou une ville..." type="text" />
-        </div>
-      </div>
-      <div className="flex items-center gap-6">
-        <button className="relative text-slate-500 hover:text-secondary transition-colors p-2">
-          <span className="material-symbols-outlined">notifications</span>
-          <span className="absolute top-2 right-2 w-2 h-2 bg-error rounded-full border-2 border-white" />
-        </button>
-        <button className="text-slate-500 hover:text-secondary transition-colors p-2">
-          <span className="material-symbols-outlined">settings</span>
-        </button>
-        <div className="h-8 w-[1px] bg-slate-200 mx-2" />
-        <button className="text-primary font-bold text-sm tracking-tight hover:text-secondary transition-colors">Déconnexion</button>
-      </div>
-    </header>
-    <div className="pt-28 px-10 pb-12 max-w-7xl mx-auto">
-      {/* Hero Title & Quick Filter */}
-      <div className="flex justify-between items-end mb-10">
-        <div className="max-w-2xl">
-          <p className="text-secondary font-bold tracking-[0.2em] text-[10px] uppercase mb-3">Analyses de Performance</p>
-          <h2 className="text-4xl font-extrabold text-primary tracking-tight mb-4">Rapports &amp; Insights</h2>
-          <p className="text-on-surface-variant text-base leading-relaxed">Visualisez la dynamique du marché marocain et exportez vos analyses stratégiques en un clic.</p>
-        </div>
-        <div className="flex gap-3">
-          <div className="bg-surface-container rounded-lg p-1 flex">
-            <button className="px-6 py-2 rounded-md bg-white shadow-sm text-sm font-bold text-primary">Vue d'ensemble</button>
-            <button className="px-6 py-2 rounded-md text-sm font-bold text-on-surface-variant hover:text-primary transition-colors">Par Ville</button>
+      <main className="md:ml-72 min-h-screen px-6 md:px-12 py-8">
+        {isInitialLoading ? (
+          <DashboardPageLoader cardCount={3} metricCount={4} showTable sidePanelCount={2} />
+        ) : (
+          <>
+        <section className="mb-8 flex flex-col xl:flex-row xl:items-end justify-between gap-6">
+          <div className="max-w-3xl">
+            <span className="mb-2 block text-[10px] font-bold uppercase tracking-[0.22em] text-secondary">
+              Capitalisation des analyses
+            </span>
+            <h1 className="text-4xl md:text-5xl font-headline font-extrabold tracking-tight text-primary">
+              Rapports et estimations sauvegardées
+            </h1>
+            <p className="mt-3 text-sm md:text-base leading-relaxed text-on-surface-variant">
+              Cette page centralise les rapports issus du backend ainsi que les estimations machine learning
+              enregistrées dans la base.
+            </p>
           </div>
-        </div>
-      </div>
-      {/* Bento Grid - Section Analysis */}
-      <div className="grid grid-cols-12 gap-6 mb-12">
-        {/* Market Trend Chart - Casablanca (Large) */}
-        <div className="col-span-8 bg-white rounded-xl p-8 shadow-sm border border-slate-100">
-          <div className="flex justify-between items-start mb-8">
-            <div>
-              <h3 className="text-xl font-bold text-primary mb-1">Évolution Casablanca vs Marrakech</h3>
-              <p className="text-sm text-on-surface-variant">Indice des prix immobiliers (2020 - 2024)</p>
-            </div>
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-2">
-                <span className="w-3 h-3 rounded-full bg-secondary" />
-                <span className="text-[11px] font-bold text-primary uppercase">Casa Finance City</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="w-3 h-3 rounded-full bg-primary" />
-                <span className="text-[11px] font-bold text-primary uppercase">Marrakech Hivernage</span>
-              </div>
-            </div>
-          </div>
-          {/* Mockup Chart Area */}
-          <div className="h-64 relative flex items-end gap-2">
-            <div className="flex-1 bg-surface-container-low h-full relative rounded-t-sm">
-              <div className="absolute bottom-0 left-0 w-full chart-bar-casa h-[40%]" />
-              <div className="absolute bottom-0 left-0 w-full chart-bar-marrakech h-[30%]" />
-            </div>
-            <div className="flex-1 bg-surface-container-low h-full relative rounded-t-sm">
-              <div className="absolute bottom-0 left-0 w-full chart-bar-casa h-[55%]" />
-              <div className="absolute bottom-0 left-0 w-full chart-bar-marrakech h-[35%]" />
-            </div>
-            <div className="flex-1 bg-surface-container-low h-full relative rounded-t-sm">
-              <div className="absolute bottom-0 left-0 w-full chart-bar-casa h-[50%]" />
-              <div className="absolute bottom-0 left-0 w-full chart-bar-marrakech h-[45%]" />
-            </div>
-            <div className="flex-1 bg-surface-container-low h-full relative rounded-t-sm">
-              <div className="absolute bottom-0 left-0 w-full chart-bar-casa h-[65%]" />
-              <div className="absolute bottom-0 left-0 w-full chart-bar-marrakech h-[55%]" />
-            </div>
-            <div className="flex-1 bg-surface-container-low h-full relative rounded-t-sm">
-              <div className="absolute bottom-0 left-0 w-full chart-bar-casa h-[75%]" />
-              <div className="absolute bottom-0 left-0 w-full chart-bar-marrakech h-[60%]" />
-            </div>
-            <div className="flex-1 bg-surface-container-low h-full relative rounded-t-sm">
-              <div className="absolute bottom-0 left-0 w-full chart-bar-casa h-[85%]" />
-              <div className="absolute bottom-0 left-0 w-full chart-bar-marrakech h-[70%]" />
-            </div>
-          </div>
-        </div>
-        {/* KPI Cards */}
-        <div className="col-span-4 flex flex-col gap-6">
-          <div className="flex-1 bg-primary text-white rounded-xl p-8 flex flex-col justify-between shadow-lg shadow-primary/10">
-            <div>
-              <span className="material-symbols-outlined opacity-60 mb-4 text-3xl">trending_up</span>
-              <p className="text-[10px] opacity-70 uppercase tracking-[0.2em] font-black">Rendement Moyen</p>
-              <h4 className="text-5xl font-extrabold mt-2">6.8<span className="text-2xl ml-1 font-medium opacity-60">%</span></h4>
-            </div>
-            <div className="mt-4 pt-4 border-t border-white/10">
-              <p className="text-xs font-bold text-secondary-container">+1.2% par rapport à 2023</p>
-            </div>
-          </div>
-          <div className="flex-1 bg-white rounded-xl p-8 border border-slate-100 shadow-sm">
-            <p className="text-[10px] text-on-surface-variant uppercase tracking-[0.2em] font-black mb-4">Volume Transactions</p>
-            <h4 className="text-4xl font-extrabold text-primary tracking-tight">1.2B <span className="text-lg font-bold text-on-surface-variant ml-1">MAD</span></h4>
-            <div className="w-full h-2 bg-surface-container-high rounded-full mt-6 overflow-hidden">
-              <div className="h-full bg-secondary w-[72%]" />
-            </div>
-            <p className="text-[10px] mt-3 text-on-surface-variant font-bold">72% de l'objectif annuel atteint</p>
-          </div>
-        </div>
-      </div>
-      {/* Filters Section */}
-      <div className="flex flex-wrap items-center justify-between mb-10 pb-6 border-b border-slate-200/50">
-        <div className="flex gap-6">
-          <div className="group">
-            <label className="block text-[10px] font-black text-slate-400 uppercase mb-2 ml-1 tracking-wider">Type d'actif</label>
-            <div className="relative">
-              <select className="appearance-none bg-white border border-slate-200 rounded-lg text-sm font-bold text-primary px-4 py-2.5 focus:ring-2 focus:ring-secondary/20 focus:border-secondary outline-none min-w-[180px] cursor-pointer">
-                <option>Tous les actifs</option>
-                <option>Résidentiel Luxe</option>
-                <option>Bureaux (CFC)</option>
-                <option>Retail &amp; Mall</option>
-              </select>
-              <span className="material-symbols-outlined absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">expand_more</span>
-            </div>
-          </div>
-          <div className="group">
-            <label className="block text-[10px] font-black text-slate-400 uppercase mb-2 ml-1 tracking-wider">Période</label>
-            <div className="relative">
-              <select className="appearance-none bg-white border border-slate-200 rounded-lg text-sm font-bold text-primary px-4 py-2.5 focus:ring-2 focus:ring-secondary/20 focus:border-secondary outline-none min-w-[180px] cursor-pointer">
-                <option>Derniers 12 mois</option>
-                <option>Année 2023</option>
-                <option>Trimestre en cours</option>
-              </select>
-              <span className="material-symbols-outlined absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">expand_more</span>
-            </div>
-          </div>
-        </div>
-        <div className="flex gap-3">
-          <button className="bg-white border border-slate-200 hover:bg-slate-50 text-primary px-6 py-2.5 rounded-lg text-sm font-bold flex items-center gap-2 transition-colors shadow-sm">
-            <span className="material-symbols-outlined text-lg">filter_list</span> Filtrer
-          </button>
-          <button className="bg-secondary text-white px-6 py-2.5 rounded-lg text-sm font-bold flex items-center gap-2 hover:opacity-95 shadow-md transition-all">
-            <span className="material-symbols-outlined text-lg">download</span> Exporter Tout
-          </button>
-        </div>
-      </div>
-      {/* Main Content Area: AI Reports vs Table */}
-      <div className="grid grid-cols-12 gap-8">
-        {/* Recent Reports Table */}
-        <div className="col-span-8">
-          <h3 className="text-lg font-black text-primary mb-6 flex items-center gap-2">
-            <span className="material-symbols-outlined text-secondary">history</span>
-            Rapports Générés Récemment
-          </h3>
-          <div className="space-y-4">
-            {/* Report Row */}
-            <div className="flex items-center justify-between bg-white p-4 rounded-xl border border-slate-100 hover:border-secondary/30 hover:shadow-lg transition-all cursor-pointer group">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-secondary/5 rounded-lg flex items-center justify-center group-hover:bg-secondary/10 transition-colors">
-                  <span className="material-symbols-outlined text-secondary" style={{fontVariationSettings: '"FILL" 1'}}>picture_as_pdf</span>
-                </div>
-                <div>
-                  <p className="font-bold text-primary text-sm group-hover:text-secondary transition-colors">Analyse Marché Résidentiel - Marrakech Hivernage</p>
-                  <p className="text-[11px] text-slate-500 font-medium">Généré le 12 Oct 2024 • 4.2 MB • Par IA Insights</p>
-                </div>
-              </div>
-              <div className="flex gap-2">
-                <button className="p-2 text-slate-400 hover:text-primary transition-colors hover:bg-slate-50 rounded-lg"><span className="material-symbols-outlined">visibility</span></button>
-                <button className="p-2 text-slate-400 hover:text-secondary transition-colors hover:bg-slate-50 rounded-lg"><span className="material-symbols-outlined">download</span></button>
-              </div>
-            </div>
-            {/* Report Row */}
-            <div className="flex items-center justify-between bg-white p-4 rounded-xl border border-slate-100 hover:border-secondary/30 hover:shadow-lg transition-all cursor-pointer group">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-primary/5 rounded-lg flex items-center justify-center group-hover:bg-primary/10 transition-colors">
-                  <span className="material-symbols-outlined text-primary" style={{fontVariationSettings: '"FILL" 1'}}>table_chart</span>
-                </div>
-                <div>
-                  <p className="font-bold text-primary text-sm group-hover:text-secondary transition-colors">Reporting Financier Q3 - Portfolio CFC Casablanca</p>
-                  <p className="text-[11px] text-slate-500 font-medium">Généré le 05 Oct 2024 • 1.8 MB • Manuel</p>
-                </div>
-              </div>
-              <div className="flex gap-2">
-                <button className="p-2 text-slate-400 hover:text-primary transition-colors hover:bg-slate-50 rounded-lg"><span className="material-symbols-outlined">visibility</span></button>
-                <button className="p-2 text-slate-400 hover:text-secondary transition-colors hover:bg-slate-50 rounded-lg"><span className="material-symbols-outlined">download</span></button>
-              </div>
-            </div>
-            {/* Report Row */}
-            <div className="flex items-center justify-between bg-white p-4 rounded-xl border border-slate-100 hover:border-secondary/30 hover:shadow-lg transition-all cursor-pointer group">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-secondary/5 rounded-lg flex items-center justify-center group-hover:bg-secondary/10 transition-colors">
-                  <span className="material-symbols-outlined text-secondary" style={{fontVariationSettings: '"FILL" 1'}}>picture_as_pdf</span>
-                </div>
-                <div>
-                  <p className="font-bold text-primary text-sm group-hover:text-secondary transition-colors">Projection Valorisation 2025 - Tanger Med Area</p>
-                  <p className="text-[11px] text-slate-500 font-medium">Généré le 28 Sep 2024 • 3.5 MB • Par IA Insights</p>
-                </div>
-              </div>
-              <div className="flex gap-2">
-                <button className="p-2 text-slate-400 hover:text-primary transition-colors hover:bg-slate-50 rounded-lg"><span className="material-symbols-outlined">visibility</span></button>
-                <button className="p-2 text-slate-400 hover:text-secondary transition-colors hover:bg-slate-50 rounded-lg"><span className="material-symbols-outlined">download</span></button>
-              </div>
-            </div>
-          </div>
-          <button className="mt-8 w-full py-4 border-2 border-dashed border-slate-200 rounded-xl text-slate-400 font-bold text-xs uppercase tracking-widest hover:bg-white hover:border-secondary hover:text-secondary transition-all">
-            Voir tout l'historique
-          </button>
-        </div>
-        {/* AI Personalized Section */}
-        <div className="col-span-4">
-          <div className="bg-primary rounded-2xl p-8 text-white relative overflow-hidden shadow-xl shadow-primary/20">
-            {/* Decorative element */}
-            <div className="absolute -top-10 -right-10 w-40 h-40 bg-secondary rounded-full blur-[60px] opacity-20" />
-            <div className="relative z-10">
-              <div className="inline-flex items-center gap-2 bg-secondary/20 text-secondary-container px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest mb-6">
-                <span className="material-symbols-outlined text-xs">auto_awesome</span> 
-                Rapports IA Personnalisés
-              </div>
-              <h3 className="text-2xl font-extrabold mb-4 leading-tight">Générez une analyse prédictive sur mesure</h3>
-              <p className="text-white/70 text-sm mb-8 leading-relaxed font-medium">Utilisez nos algorithmes de Machine Learning pour prédire l'évolution des quartiers en plein essor à Casablanca et Rabat.</p>
-              <div className="space-y-4">
-                <div className="bg-white/5 border border-white/10 p-4 rounded-xl backdrop-blur-sm">
-                  <p className="text-[10px] font-black text-white/40 uppercase tracking-wider mb-2">Focus Géographique</p>
-                  <button className="w-full flex justify-between items-center text-sm font-bold">
-                    Anfa Park &amp; CFC <span className="material-symbols-outlined text-lg">expand_more</span>
-                  </button>
-                </div>
-                <div className="bg-white/5 border border-white/10 p-4 rounded-xl backdrop-blur-sm">
-                  <p className="text-[10px] font-black text-white/40 uppercase tracking-wider mb-2">Indicateurs clés</p>
-                  <div className="flex flex-wrap gap-2">
-                    <span className="bg-white/10 px-2.5 py-1 rounded text-[10px] font-bold">ROI 5 ans</span>
-                    <span className="bg-white/10 px-2.5 py-1 rounded text-[10px] font-bold">Taux Vacance</span>
-                    <span className="bg-white/10 px-2.5 py-1 rounded text-[10px] font-bold">+2 plus</span>
-                  </div>
-                </div>
-                <button className="w-full bg-secondary hover:opacity-90 py-4 rounded-xl font-black text-xs uppercase tracking-widest transition-all shadow-lg shadow-black/20 flex items-center justify-center gap-3 mt-4">
-                  Générer avec l'IA
-                  <span className="material-symbols-outlined text-lg">rocket_launch</span>
-                </button>
-              </div>
-            </div>
-          </div>
-          {/* Market Insights Tip */}
-          <div className="mt-8 bg-white rounded-xl p-6 border border-slate-100 shadow-sm">
-            <h4 className="font-black text-primary text-sm flex items-center gap-2 mb-3">
-              <span className="material-symbols-outlined text-secondary text-lg">lightbulb</span>
-              Conseil du Marché
-            </h4>
-            <p className="text-sm text-on-surface-variant leading-relaxed font-medium">Le quartier <strong>Bouskoura</strong> montre une accélération de +14% sur la demande locative ce trimestre. Pensez à réévaluer vos actifs dans cette zone.</p>
-          </div>
-        </div>
-      </div>
-    </div>
-  </main>
-</div>
 
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="rounded-xl bg-surface-container-low px-4 py-3 text-sm font-semibold text-on-surface-variant">
+              Synchronisé le {formatDate(overview.refreshed_at)}
+            </div>
+            <Link
+              className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-bold text-white shadow-sm"
+              to="/estimation-immobiliere-ia"
+            >
+              <span className="material-symbols-outlined text-base">add</span>
+              Nouvelle estimation
+            </Link>
+          </div>
+        </section>
+
+        {error && (
+          <div className="mb-8 rounded-xl border border-error/20 bg-error-container px-5 py-4 text-sm font-semibold text-error">
+            {error}
+          </div>
+        )}
+
+        <section className="mb-8 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5">
+          <MetricCard label="Rapports en base" value={String(reports.length || overview.reports)} />
+          <MetricCard label="Estimations sauvegardées" value={String(valuations.length)} />
+          <MetricCard label="Rendement moyen" value={formatPercent(overview.average_annual_yield)} />
+          <MetricCard label="Valeur portefeuille" value={formatMoney(overview.total_asset_value, true)} />
+        </section>
+
+        <section className="mb-8 rounded-2xl bg-surface-container-lowest p-5 md:p-6 shadow-[0_12px_40px_rgba(26,28,29,0.06)]">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+            <label className="block md:col-span-2">
+              <span className="mb-2 block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">
+                Recherche
+              </span>
+              <div className="relative">
+                <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-base">
+                  search
+                </span>
+                <input
+                  className="w-full rounded-xl border-none bg-surface-container-low py-3 pl-10 pr-4 text-sm focus:ring-2 focus:ring-secondary/20"
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="Titre, actif, portfolio, organisation..."
+                  type="text"
+                  value={query}
+                />
+              </div>
+            </label>
+
+            <label className="block">
+              <span className="mb-2 block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">
+                Type
+              </span>
+              <select
+                className="w-full rounded-xl border-none bg-surface-container-low px-4 py-3 text-sm focus:ring-2 focus:ring-secondary/20"
+                onChange={(event) => setSelectedType(event.target.value)}
+                value={selectedType}
+              >
+                <option value="all">Tous</option>
+                <option value="market">Marché</option>
+                <option value="portfolio">Portfolio</option>
+                <option value="financial">Financier</option>
+                <option value="risk">Risque</option>
+              </select>
+            </label>
+
+            <label className="block">
+              <span className="mb-2 block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">
+                Statut
+              </span>
+              <select
+                className="w-full rounded-xl border-none bg-surface-container-low px-4 py-3 text-sm focus:ring-2 focus:ring-secondary/20"
+                onChange={(event) => setSelectedStatus(event.target.value)}
+                value={selectedStatus}
+              >
+                <option value="all">Tous</option>
+                <option value="ready">Prêt</option>
+                <option value="generating">Génération</option>
+                <option value="archived">Archivé</option>
+              </select>
+            </label>
+          </div>
+        </section>
+
+        <section className="grid grid-cols-1 2xl:grid-cols-[minmax(0,1.75fr)_360px] gap-8">
+          <div className="space-y-8">
+            <section className="rounded-2xl bg-white p-6 md:p-8 shadow-sm">
+              <div className="mb-8 flex flex-col lg:flex-row lg:items-end justify-between gap-5">
+                <div>
+                  <h2 className="text-2xl font-headline font-bold text-primary">Lecture portefeuille</h2>
+                  <p className="mt-1 text-sm text-on-surface-variant">
+                    Série synthétique générée à partir des indicateurs de votre dashboard.
+                  </p>
+                </div>
+                <span className="rounded-full bg-surface-container-low px-4 py-2 text-xs font-bold uppercase tracking-widest text-on-surface-variant">
+                  {growthSeries.length} points
+                </span>
+              </div>
+
+              <div className="h-64 w-full rounded-2xl bg-surface-container-low px-4 pt-8 flex items-end gap-4 overflow-hidden">
+                {growthSeries.map((point, index) => (
+                  <div
+                    className={index === growthSeries.length - 1 ? "flex-1 rounded-t-xl bg-primary" : "flex-1 rounded-t-xl bg-secondary/75"}
+                    key={point.label}
+                    style={{ height: `${Math.max(14, point.height_percent)}%` }}
+                    title={`${point.label}: ${formatMoney(point.value, true)}`}
+                  />
+                ))}
+              </div>
+              <div className="mt-4 flex justify-between px-2 text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">
+                {growthSeries.map((point) => (
+                  <span key={point.label}>{point.label}</span>
+                ))}
+              </div>
+            </section>
+
+            <section>
+              <div className="mb-5 flex items-center justify-between gap-4">
+                <div>
+                  <h2 className="text-2xl font-headline font-bold text-primary">Rapports backend</h2>
+                  <p className="mt-1 text-sm text-on-surface-variant">
+                    Historique des rapports générés et exposés depuis l’API.
+                  </p>
+                </div>
+                <span className="rounded-full bg-surface-container-low px-4 py-2 text-xs font-bold uppercase tracking-widest text-on-surface-variant">
+                  {filteredReports.length} résultat{filteredReports.length > 1 ? "s" : ""}
+                </span>
+              </div>
+
+              {isLoading ? (
+                <div className="rounded-2xl bg-white p-8 text-sm font-semibold text-on-surface-variant shadow-sm">
+                  Chargement des rapports...
+                </div>
+              ) : filteredReports.length === 0 ? (
+                <div className="rounded-2xl bg-white p-8 text-sm font-semibold text-on-surface-variant shadow-sm">
+                  Aucun rapport ne correspond aux filtres actuels.
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {filteredReports.map((report) => (
+                    <article
+                      className="rounded-2xl border border-slate-200/60 bg-white p-5 shadow-sm"
+                      key={report.id}
+                    >
+                      <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-5">
+                        <div className="min-w-0">
+                          <div className="mb-3 flex flex-wrap items-center gap-2">
+                            <span className="rounded-full bg-secondary-container px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-secondary">
+                              {reportTypeLabel(report.report_type)}
+                            </span>
+                            <span className="rounded-full bg-surface-container-low px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">
+                              {reportStatusLabel(report.status)}
+                            </span>
+                          </div>
+                          <h3 className="text-lg font-headline font-bold text-primary">{report.title}</h3>
+                          <p className="mt-2 text-sm leading-relaxed text-on-surface-variant">
+                            {suggestionText(report)}
+                          </p>
+                          <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+                            <DataPill label="Organisation" value={report.organization_name} />
+                            <DataPill label="Portfolio" value={report.portfolio_name || "N/A"} />
+                            <DataPill label="Actif" value={report.asset_name || "N/A"} />
+                          </div>
+                        </div>
+
+                        <div className="flex shrink-0 flex-col items-start lg:items-end gap-3">
+                          <p className="text-[11px] font-semibold uppercase tracking-widest text-on-surface-variant">
+                            {formatDate(report.created_at)}
+                          </p>
+                          {report.file_url ? (
+                            <a
+                              className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-bold text-white shadow-sm"
+                              href={report.file_url}
+                              rel="noreferrer"
+                              target="_blank"
+                            >
+                              <span className="material-symbols-outlined text-base">download</span>
+                              Ouvrir le fichier
+                            </a>
+                          ) : (
+                            <Link
+                              className="inline-flex items-center gap-2 rounded-xl bg-surface-container-low px-4 py-3 text-sm font-bold text-primary"
+                              to="/estimation-immobiliere-ia"
+                            >
+                              <span className="material-symbols-outlined text-base">visibility</span>
+                              Voir l’analyse liée
+                            </Link>
+                          )}
+                        </div>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </section>
+
+            <section>
+              <div className="mb-5">
+                <h2 className="text-2xl font-headline font-bold text-primary">Estimations enregistrées</h2>
+                <p className="mt-1 text-sm text-on-surface-variant">
+                  Valorisations générées par le moteur machine learning et conservées en base.
+                </p>
+              </div>
+
+              {filteredValuations.length === 0 ? (
+                <div className="rounded-2xl bg-white p-8 text-sm font-semibold text-on-surface-variant shadow-sm">
+                  Aucune estimation sauvegardée pour le moment.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
+                  {filteredValuations.slice(0, 6).map((valuation) => (
+                    <article
+                      className="rounded-2xl border border-slate-200/60 bg-white p-6 shadow-sm"
+                      key={valuation.id}
+                    >
+                      <div className="mb-4 flex items-start justify-between gap-4">
+                        <div>
+                          <h3 className="text-lg font-headline font-bold text-primary">{valuation.title}</h3>
+                          <p className="mt-1 text-sm text-on-surface-variant">
+                            {valuation.asset_name || valuation.organization_name}
+                          </p>
+                        </div>
+                        <span className="rounded-full bg-primary-container px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-primary">
+                          {valuation.model_version}
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3 text-sm">
+                        <DataPill label="Valeur" value={formatMoney(valuation.estimated_value, true)} />
+                        <DataPill label="Confiance" value={formatPercent(valuation.confidence_score)} />
+                        <DataPill label="Borne basse" value={formatMoney(valuation.low_estimate, true)} />
+                        <DataPill label="Borne haute" value={formatMoney(valuation.high_estimate, true)} />
+                      </div>
+
+                      <p className="mt-4 text-sm leading-relaxed text-on-surface-variant">
+                        {valuation.summary || "Estimation enregistrée depuis le moteur ML SmartEstate."}
+                      </p>
+                      <p className="mt-4 text-[11px] font-semibold uppercase tracking-widest text-on-surface-variant">
+                        {formatDate(valuation.created_at)}
+                      </p>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </section>
+          </div>
+
+          <aside className="space-y-6">
+            <section className="rounded-2xl bg-primary p-7 text-white shadow-[0_18px_40px_rgba(26,35,126,0.2)]">
+              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-primary-fixed-dim">
+                Vue IA
+              </p>
+              <h2 className="mt-3 text-2xl font-headline font-extrabold">
+                Vos analyses vivent déjà dans la base
+              </h2>
+              <p className="mt-4 text-sm leading-relaxed text-primary-fixed">
+                L’objectif ici est de conserver les livrables stratégiques issus des estimations, des scénarios
+                et des synthèses marché pour alimenter la décision.
+              </p>
+
+              <div className="mt-6 space-y-4">
+                <DataRow label="Rapports disponibles" value={String(reports.length)} />
+                <DataRow label="Scénarios en base" value={String(overview.scenarios)} />
+                <DataRow label="Recommandations ouvertes" value={String(overview.recommendations_open)} />
+              </div>
+            </section>
+
+            <section className="rounded-2xl bg-white p-6 shadow-sm">
+              <div className="mb-5">
+                <h3 className="text-lg font-headline font-bold text-primary">Couverture marché</h3>
+                <p className="mt-1 text-sm text-on-surface-variant">
+                  Répartition des annonces ETL par ville prioritaire.
+                </p>
+              </div>
+
+              <div className="space-y-4">
+                {overview.market_cities.length === 0 ? (
+                  <p className="text-sm text-on-surface-variant">
+                    Les statistiques ville seront disponibles après synchronisation ETL.
+                  </p>
+                ) : (
+                  overview.market_cities.map((city) => (
+                    <div key={city.city}>
+                      <div className="mb-2 flex items-center justify-between text-sm">
+                        <span className="font-bold text-primary">{city.city}</span>
+                        <span className="text-on-surface-variant">
+                          {city.listing_count ?? 0} annonces
+                        </span>
+                      </div>
+                      <div className="h-2 overflow-hidden rounded-full bg-surface-container-low">
+                        <div
+                          className="h-full rounded-full bg-secondary"
+                          style={{
+                            width: `${Math.min(
+                              100,
+                              Math.max(
+                                12,
+                                ((city.listing_count ?? 0) /
+                                  Math.max(
+                                    1,
+                                    overview.market_cities.reduce(
+                                      (sum, item) => sum + (item.listing_count ?? 0),
+                                      0,
+                                    ),
+                                  )) *
+                                  100,
+                              ),
+                            )}%`,
+                          }}
+                        />
+                      </div>
+                      <p className="mt-2 text-[11px] text-on-surface-variant">
+                        Prix moyen: {city.average_price ? formatMoney(city.average_price, true) : "N/A"}
+                      </p>
+                    </div>
+                  ))
+                )}
+              </div>
+            </section>
+          </aside>
+        </section>
+          </>
+        )}
+      </main>
     </ImportedPageDocument>
+  );
+}
+
+function MetricCard({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-2xl bg-surface-container-lowest p-6 shadow-[0_12px_40px_rgba(26,28,29,0.06)]">
+      <p className="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">{label}</p>
+      <p className="mt-3 text-3xl font-headline font-extrabold text-primary">{value}</p>
+    </div>
+  );
+}
+
+function DataPill({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl bg-surface-container-low px-4 py-3">
+      <p className="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">{label}</p>
+      <p className="mt-1 font-bold text-primary">{value}</p>
+    </div>
+  );
+}
+
+function DataRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between gap-4 border-b border-white/10 pb-4 text-sm">
+      <span className="text-primary-fixed">{label}</span>
+      <span className="font-bold text-white">{value}</span>
+    </div>
   );
 }

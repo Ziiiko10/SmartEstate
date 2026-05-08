@@ -1,342 +1,710 @@
+import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import ImportedPageDocument from "../components/ImportedPageDocument";
+import { DashboardPageLoader } from "../components/LoadingState";
+import { useAuth } from "../auth/AuthContext";
+import { apiRequest, getErrorMessage } from "../lib/api";
 
 const pageStyles = `.material-symbols-outlined {
-        font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
-      }
-      .glass-effect {
-        background: rgba(249, 249, 251, 0.8);
-        backdrop-filter: blur(24px);
-      }
-      .text-shadow-sm {
-        text-shadow: 0 1px 2px rgba(0,0,0,0.1);
-      }`;
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }`;
+
+type ApiNumber = number | string | null;
+
+type DashboardOpportunity = {
+  area_sqm: ApiNumber;
+  asset_type: string;
+  city: string;
+  confidence_score: ApiNumber;
+  district: string;
+  estimated_value: ApiNumber;
+  external_url: string;
+  id: number;
+  image_urls: string[];
+  last_seen_at: string;
+  market_discount_percent: ApiNumber;
+  price: ApiNumber;
+  primary_image_url: string;
+  published_label: string;
+  score: ApiNumber;
+  signal: string;
+  source: string;
+  title: string;
+};
+
+type MarketCity = {
+  average_price?: ApiNumber;
+  city: string;
+  listing_count?: number;
+};
+
+type DashboardOverview = {
+  average_market_price_per_sqm: number;
+  market_cities: MarketCity[];
+  market_listings: number;
+  opportunities: DashboardOpportunity[];
+  recommendations_open: number;
+  refreshed_at: string;
+};
+
+type RecommendationRecord = {
+  action_items: string[];
+  asset_name: string | null;
+  category: string;
+  confidence_score: ApiNumber;
+  created_at: string;
+  description: string;
+  expected_roi: ApiNumber;
+  id: number;
+  organization_name: string;
+  priority: string;
+  status: string;
+  title: string;
+};
+
+const emptyOverview: DashboardOverview = {
+  average_market_price_per_sqm: 0,
+  market_cities: [],
+  market_listings: 0,
+  opportunities: [],
+  recommendations_open: 0,
+  refreshed_at: "",
+};
+
+function toNumber(value: ApiNumber | undefined) {
+  if (value === null || value === undefined || value === "") {
+    return 0;
+  }
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function formatMoney(value: ApiNumber | undefined, compact = false) {
+  const amount = toNumber(value);
+  if (compact && Math.abs(amount) >= 1_000_000) {
+    return `${(amount / 1_000_000).toLocaleString("fr-MA", {
+      maximumFractionDigits: 2,
+      minimumFractionDigits: 1,
+    })} MDH`;
+  }
+
+  return `${amount.toLocaleString("fr-MA", {
+    maximumFractionDigits: 0,
+  })} MAD`;
+}
+
+function formatPercent(value: ApiNumber | undefined) {
+  return `${toNumber(value).toLocaleString("fr-MA", {
+    maximumFractionDigits: 1,
+    minimumFractionDigits: 1,
+  })}%`;
+}
+
+function formatDate(value: string) {
+  if (!value) {
+    return "N/A";
+  }
+
+  return new Intl.DateTimeFormat("fr-MA", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(value));
+}
+
+function relativeDate(value: string) {
+  if (!value) {
+    return "Synchronisation en attente";
+  }
+
+  const date = new Date(value);
+  const diffHours = Math.max(1, Math.round((Date.now() - date.getTime()) / 3600000));
+  if (diffHours < 24) {
+    return `Il y a ${diffHours} h`;
+  }
+  return formatDate(value);
+}
+
+function cityGradient(city: string) {
+  const palette: Record<string, string> = {
+    Agadir: "from-[#0f766e] via-[#14b8a6] to-[#67e8f9]",
+    Casablanca: "from-[#183153] via-[#1b6d24] to-[#89b0ae]",
+    Marrakech: "from-[#7b341e] via-[#c05621] to-[#f6ad55]",
+    Rabat: "from-[#1a237e] via-[#2c5282] to-[#63b3ed]",
+    Tanger: "from-[#0f766e] via-[#1d4ed8] to-[#7dd3fc]",
+  };
+
+  return palette[city] ?? "from-[#334155] via-[#475569] to-[#94a3b8]";
+}
+
+function signalLabel(signal: string) {
+  const labels: Record<string, string> = {
+    avoid: "Risque élevé",
+    neutral: "Équilibré",
+    strong_buy: "Prioritaire",
+    watchlist: "À surveiller",
+  };
+  return labels[signal] ?? signal;
+}
+
+function priorityLabel(priority: string) {
+  const labels: Record<string, string> = {
+    high: "Haute",
+    low: "Faible",
+    medium: "Moyenne",
+  };
+  return labels[priority] ?? priority;
+}
+
+function statusLabel(status: string) {
+  const labels: Record<string, string> = {
+    accepted: "Acceptée",
+    in_progress: "En cours",
+    open: "Ouverte",
+    rejected: "Rejetée",
+  };
+  return labels[status] ?? status;
+}
+
+function categoryLabel(category: string) {
+  const labels: Record<string, string> = {
+    acquisition: "Acquisition",
+    disposition: "Arbitrage",
+    optimization: "Optimisation",
+    risk: "Risque",
+  };
+  return labels[category] ?? category;
+}
 
 export default function AiRecommendationsPage() {
+  const { token } = useAuth();
+  const [overview, setOverview] = useState<DashboardOverview>(emptyOverview);
+  const [recommendations, setRecommendations] = useState<RecommendationRecord[]>([]);
+  const [query, setQuery] = useState("");
+  const [selectedSignal, setSelectedSignal] = useState("all");
+  const [selectedSource, setSelectedSource] = useState("all");
+  const [error, setError] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadPage() {
+      setIsLoading(true);
+      setError("");
+
+      try {
+        const [overviewPayload, recommendationPayload] = await Promise.all([
+          apiRequest<DashboardOverview>("/dashboard/overview/", { token }),
+          apiRequest<RecommendationRecord[]>("/recommendations/", { token }),
+        ]);
+
+        if (!active) {
+          return;
+        }
+
+        setOverview({ ...emptyOverview, ...overviewPayload });
+        setRecommendations(recommendationPayload);
+      } catch (requestError) {
+        if (!active) {
+          return;
+        }
+        setError(getErrorMessage(requestError, "Impossible de charger les recommandations IA."));
+      } finally {
+        if (active) {
+          setIsLoading(false);
+        }
+      }
+    }
+
+    void loadPage();
+    return () => {
+      active = false;
+    };
+  }, [token]);
+
+  const filteredOpportunities = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase();
+
+    return overview.opportunities.filter((opportunity) => {
+      if (selectedSignal !== "all" && opportunity.signal !== selectedSignal) {
+        return false;
+      }
+
+      if (selectedSource !== "all" && opportunity.source !== selectedSource) {
+        return false;
+      }
+
+      if (!normalizedQuery) {
+        return true;
+      }
+
+      return [opportunity.title, opportunity.city, opportunity.district, opportunity.source]
+        .join(" ")
+        .toLowerCase()
+        .includes(normalizedQuery);
+    });
+  }, [overview.opportunities, query, selectedSignal, selectedSource]);
+
+  const filteredRecommendations = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase();
+
+    if (!normalizedQuery) {
+      return recommendations;
+    }
+
+    return recommendations.filter((recommendation) =>
+      [
+        recommendation.title,
+        recommendation.description,
+        recommendation.organization_name,
+        recommendation.asset_name ?? "",
+      ]
+        .join(" ")
+        .toLowerCase()
+        .includes(normalizedQuery),
+    );
+  }, [query, recommendations]);
+
+  const averageOpportunityScore =
+    filteredOpportunities.length > 0
+      ? filteredOpportunities.reduce((total, opportunity) => total + toNumber(opportunity.score), 0) /
+        filteredOpportunities.length
+      : 0;
+
+  const priorityOpportunities = filteredOpportunities.filter(
+    (opportunity) => opportunity.signal === "strong_buy",
+  ).length;
+  const isInitialLoading =
+    isLoading &&
+    overview.opportunities.length === 0 &&
+    recommendations.length === 0 &&
+    !error;
+
   return (
     <ImportedPageDocument
-      bodyClassName="bg-background text-on-background font-body antialiased"
-      title="Recommandations IA"
+      bodyClassName="bg-background font-body text-on-surface antialiased"
+      title="SmartEstate | Recommandations IA"
       styles={pageStyles}
     >
-      <div>
-  {/* Sidebar Navigation */}
-  <aside className="h-screen w-72 fixed left-0 top-0 border-r border-[#c6c5d4]/15 bg-[#ffffff] flex flex-col z-50">
-    <div className="px-8 py-8">
-      <h1 className="text-xl font-headline font-bold tracking-tighter text-[#1A237E] uppercase">SmartEstate</h1>
-    </div>
-    <nav className="flex-1 flex flex-col gap-1 px-2">
-      <a className="group flex items-center gap-3 px-6 py-4 text-[#454652] hover:bg-[#f9f9fb] transition-all duration-200 hover:translate-x-1" href="#">
-        <span className="material-symbols-outlined" data-icon="dashboard">dashboard</span>
-        <span className="font-medium">Tableau de Bord</span>
-      </a>
-      <a className="group flex items-center gap-3 px-6 py-4 text-[#454652] hover:bg-[#f9f9fb] transition-all duration-200 hover:translate-x-1" href="#">
-        <span className="material-symbols-outlined" data-icon="domain">domain</span>
-        <span className="font-medium">Portfolio</span>
-      </a>
-      <a className="group flex items-center gap-3 px-6 py-4 text-[#454652] hover:bg-[#f9f9fb] transition-all duration-200 hover:translate-x-1" href="#">
-        <span className="material-symbols-outlined" data-icon="calculate">calculate</span>
-        <span className="font-medium">Estimation</span>
-      </a>
-      <a className="group flex items-center gap-3 px-6 py-4 bg-[#eeeef0] text-[#1b6d24] font-bold border-r-4 border-[#1b6d24]" href="#">
-        <span className="material-symbols-outlined" data-icon="auto_awesome">auto_awesome</span>
-        <span className="font-medium">Recommandations</span>
-      </a>
-      <a className="group flex items-center gap-3 px-6 py-4 text-[#454652] hover:bg-[#f9f9fb] transition-all duration-200 hover:translate-x-1" href="#">
-        <span className="material-symbols-outlined" data-icon="query_stats">query_stats</span>
-        <span className="font-medium">Scénarios</span>
-      </a>
-      <a className="group flex items-center gap-3 px-6 py-4 text-[#454652] hover:bg-[#f9f9fb] transition-all duration-200 hover:translate-x-1" href="#">
-        <span className="material-symbols-outlined" data-icon="description">description</span>
-        <span className="font-medium">Rapports</span>
-      </a>
-    </nav>
-    <div className="p-6 border-t border-[#c6c5d4]/15">
-      <div className="flex items-center gap-3 mb-6">
-        <img className="w-10 h-10 rounded-full object-cover" data-alt="portrait of a professional male investment director in a tailored suit with a neutral background" src="https://lh3.googleusercontent.com/aida-public/AB6AXuB12VyA2hs7s9tg4GzYwChv0As5WdNE9CktHMi8ekWQ9FgU2MQwv3olCMNMMtxs1wlMniO99AnbaP73mmOEr0ir5Np0x6_ob_7zN11BehAZwgjKNh4Y9wuFEiG8Ge7Py8Y0ZUgh9grKflXwo1wCMaLWONz9NZxIsX1qbOFcjfJ2QO8PMKmMLvOuieqxWlmr1EZRGYl_bWdQ6nJ77ucJECXg9UOva9DrF-EmGcZgfgqvhP-7uZX7PG8z9asTONdOHNA1kjmjIGKrhc1a" />
-        <div className="overflow-hidden">
-          <p className="text-sm font-bold text-on-surface truncate">Yassine Mansouri</p>
-          <p className="text-xs text-on-surface-variant truncate">Directeur d'Investissement</p>
-        </div>
-      </div>
-      <button className="w-full py-3 bg-[#eeeef0] text-on-surface font-semibold rounded-lg hover:bg-surface-container-highest transition-colors flex items-center justify-center gap-2">
-        <span className="material-symbols-outlined text-sm" data-icon="add">add</span>
-        Nouvelle Analyse
-      </button>
-    </div>
-  </aside>
-  {/* Main Content Area */}
-  <main className="ml-72 min-h-screen">
-    {/* Header / Top Bar */}
-    <header className="flex justify-between items-center px-12 py-6 sticky top-0 glass-effect z-40">
-      <div className="flex flex-col">
-        <h2 className="text-2xl font-headline font-extrabold text-primary tracking-tight">Opportunités du Moment au Maroc</h2>
-        <p className="text-on-surface-variant text-sm mt-1">Analyse prédictive basée sur les flux économiques de la région MENA.</p>
-      </div>
-      <div className="flex items-center gap-6">
-        <div className="flex items-center bg-surface-container px-4 py-2 rounded-xl">
-          <span className="material-symbols-outlined text-on-surface-variant mr-3" data-icon="search">search</span>
-          <input className="bg-transparent border-none focus:ring-0 text-sm w-48 font-medium" placeholder="Rechercher un actif..." type="text" />
-        </div>
-        <div className="flex gap-4">
-          <span className="material-symbols-outlined p-2 text-on-surface-variant hover:bg-surface-container transition-colors rounded-full cursor-pointer" data-icon="notifications">notifications</span>
-          <span className="material-symbols-outlined p-2 text-on-surface-variant hover:bg-surface-container transition-colors rounded-full cursor-pointer" data-icon="settings">settings</span>
-        </div>
-      </div>
-    </header>
-    {/* Filters Section */}
-    <section className="px-12 py-8">
-      <div className="bg-surface-container-lowest p-6 rounded-xl flex flex-wrap items-end gap-8 shadow-[0_12px_40px_rgba(26,28,29,0.06)]">
-        <div className="flex-1 min-w-[200px]">
-          <label className="block text-xs font-bold uppercase tracking-wider text-on-surface-variant mb-2">Budget Maximum</label>
-          <div className="relative">
-            <select className="w-full bg-surface-container-low border-none rounded-lg py-3 pl-4 pr-10 appearance-none font-semibold text-primary focus:ring-2 focus:ring-secondary/20">
-              <option>5,000,000 DH</option>
-              <option>10,000,000 DH</option>
-              <option>25,000,000 DH</option>
-              <option>50,000,000 DH+</option>
-            </select>
-            <span className="material-symbols-outlined absolute right-3 top-3 text-on-surface-variant pointer-events-none" data-icon="keyboard_arrow_down">keyboard_arrow_down</span>
+      <main className="md:ml-72 min-h-screen px-6 md:px-12 py-8">
+        {isInitialLoading ? (
+          <DashboardPageLoader cardCount={4} metricCount={4} sidePanelCount={3} />
+        ) : (
+          <>
+        <section className="mb-8 flex flex-col xl:flex-row xl:items-end justify-between gap-6">
+          <div className="max-w-3xl">
+            <span className="mb-2 block text-[10px] font-bold uppercase tracking-[0.22em] text-secondary">
+              Flux ETL + moteur ML
+            </span>
+            <h1 className="text-4xl md:text-5xl font-headline font-extrabold tracking-tight text-primary">
+              Recommandations d'investissement
+            </h1>
+            <p className="mt-3 text-sm md:text-base leading-relaxed text-on-surface-variant">
+              Cette section exploite vos annonces scrapées et les estimations machine learning pour mettre
+              en avant les opportunités les plus actionnables.
+            </p>
           </div>
-        </div>
-        <div className="flex-1 min-w-[200px]">
-          <label className="block text-xs font-bold uppercase tracking-wider text-on-surface-variant mb-2">Rendement Cible (Yield)</label>
-          <div className="flex items-center gap-4">
-            <input className="flex-1 h-2 bg-surface-container-highest rounded-full appearance-none accent-secondary" type="range" />
-            <span className="text-secondary font-bold text-sm">7.5% +</span>
-          </div>
-        </div>
-        <div className="flex-1 min-w-[200px]">
-          <label className="block text-xs font-bold uppercase tracking-wider text-on-surface-variant mb-2">Type d'Actif</label>
-          <div className="flex gap-2">
-            <button className="px-4 py-2 bg-primary text-white text-xs font-bold rounded-lg">Mixte</button>
-            <button className="px-4 py-2 bg-surface-container-high text-on-surface text-xs font-bold rounded-lg hover:bg-surface-container-highest transition-colors">Résidentiel</button>
-            <button className="px-4 py-2 bg-surface-container-high text-on-surface text-xs font-bold rounded-lg hover:bg-surface-container-highest transition-colors">Retail</button>
-          </div>
-        </div>
-        <button className="px-8 py-3 bg-secondary text-white font-bold rounded-lg shadow-lg hover:brightness-110 transition-all flex items-center gap-2">
-          <span className="material-symbols-outlined text-sm" data-icon="filter_list">filter_list</span>
-          Filtrer
-        </button>
-      </div>
-    </section>
-    {/* Opportunity Grid */}
-    <section className="px-12 pb-12">
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
-        {/* Card 1: Tanger */}
-        <div className="group bg-surface-container-lowest rounded-xl overflow-hidden flex flex-col md:flex-row transition-all hover:translate-y-[-4px] shadow-[0_12px_40px_rgba(26,28,29,0.06)] border border-transparent hover:border-outline-variant/15">
-          <div className="w-full md:w-5/12 relative overflow-hidden">
-            <img className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-110" data-alt="modern architectural building with white facade and large windows reflecting coastal light in tangier morocco" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAEMlljWX8ibq2CaiYp6VH7exRpgbjClxOPxvcRrpHPgCu8aQ0PUrCWd47Kjx6FH3Dvw407RcgtA7GRQt3ffvcVzUi-9jLqPKeOQNjWkoHcwkvvOl_qczo4Bo5u40dAzAWlHyq-Dzw3qczutidF4251N9kA6Xiy0dmJQF4zSToLdSeDnGFoaF9VvUHdoleftl2C4kOR9kJ-2i7WSxRLYs85iuXvYBEp0SnWcMztfM2iM1ss8khM8XASzonXnTU-bVb565C3Eeu9aglq" />
-            <div className="absolute top-4 left-4 bg-primary/90 text-white px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest backdrop-blur-md">Hot Deal</div>
-          </div>
-          <div className="flex-1 p-8 flex flex-col justify-between">
-            <div>
-              <div className="flex justify-between items-start mb-4">
-                <div>
-                  <h3 className="text-xl font-headline font-bold text-on-surface tracking-tight">Marina Bay Residences</h3>
-                  <div className="flex items-center gap-1 text-on-surface-variant mt-1">
-                    <span className="material-symbols-outlined text-sm" data-icon="location_on">location_on</span>
-                    <span className="text-sm font-medium">Tanger, Zone Franche</span>
-                  </div>
-                </div>
-                <div className="bg-secondary/10 text-secondary p-3 rounded-xl text-center">
-                  <p className="text-[10px] font-bold uppercase leading-none mb-1">Score IA</p>
-                  <p className="text-2xl font-headline font-black leading-none">94</p>
-                </div>
-              </div>
-              <div className="mt-6 flex gap-6">
-                <div>
-                  <p className="text-[10px] text-on-surface-variant uppercase font-bold tracking-wider mb-1">Prix Estimé</p>
-                  <p className="text-lg font-headline font-extrabold text-primary">12.4M DH</p>
-                </div>
-                <div>
-                  <p className="text-[10px] text-on-surface-variant uppercase font-bold tracking-wider mb-1">Rendement Proj.</p>
-                  <p className="text-lg font-headline font-extrabold text-secondary">8.2%</p>
-                </div>
-              </div>
-            </div>
-            <div className="mt-8 flex items-center justify-between gap-4">
-              <div className="flex -space-x-2">
-                <div className="w-8 h-8 rounded-full border-2 border-white bg-surface-container flex items-center justify-center text-[10px] font-bold">+12</div>
-              </div>
-              <button className="bg-gradient-to-br from-secondary to-[#217128] text-white px-6 py-3 rounded-lg font-bold text-sm shadow-md hover:shadow-xl transition-all active:scale-95 flex items-center gap-2">
-                Analyser l'opportunité
-                <span className="material-symbols-outlined text-sm" data-icon="trending_up">trending_up</span>
-              </button>
-            </div>
-          </div>
-        </div>
-        {/* Card 2: Casablanca */}
-        <div className="group bg-surface-container-lowest rounded-xl overflow-hidden flex flex-col md:flex-row transition-all hover:translate-y-[-4px] shadow-[0_12px_40px_rgba(26,28,29,0.06)] border border-transparent hover:border-outline-variant/15">
-          <div className="w-full md:w-5/12 relative overflow-hidden">
-            <img className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-110" data-alt="luxury residential mansion with swimming pool and landscaped gardens in casablanca at sunset with warm glows" src="https://lh3.googleusercontent.com/aida-public/AB6AXuB0E7PozMXhzeuCYWNqtSlL0UacqceLUxU7ekdF5-QDcT_1gUDcNYuLILYyejruqJzbeVqY-okPLrt9Ym_sQtqxQtpYXL0O2Uz65mKCHhs13UfCkNSl5oPqwLBoHC8pn0pzcsDSSsFwU2MpMRwWefC7lneKq3BvLTYTr-LWGSCRLxd-u41rUIV4v3NTsyzSJ2qfbM0_K9u5-VlJeIVkQFk3FkCb6g-d9Ctuuhh0yt939u6XZhy6fw2HzxPenQ5SrJupVo_EIYgFg6WM" />
-            <div className="absolute top-4 left-4 bg-tertiary-container text-on-tertiary-container px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest backdrop-blur-md">Premium</div>
-          </div>
-          <div className="flex-1 p-8 flex flex-col justify-between">
-            <div>
-              <div className="flex justify-between items-start mb-4">
-                <div>
-                  <h3 className="text-xl font-headline font-bold text-on-surface tracking-tight">Anfa Tower Commercial</h3>
-                  <div className="flex items-center gap-1 text-on-surface-variant mt-1">
-                    <span className="material-symbols-outlined text-sm" data-icon="location_on">location_on</span>
-                    <span className="text-sm font-medium">Casablanca, Finance City</span>
-                  </div>
-                </div>
-                <div className="bg-primary/10 text-primary p-3 rounded-xl text-center">
-                  <p className="text-[10px] font-bold uppercase leading-none mb-1">Score IA</p>
-                  <p className="text-2xl font-headline font-black leading-none">88</p>
-                </div>
-              </div>
-              <div className="mt-6 flex gap-6">
-                <div>
-                  <p className="text-[10px] text-on-surface-variant uppercase font-bold tracking-wider mb-1">Prix Estimé</p>
-                  <p className="text-lg font-headline font-extrabold text-primary">34.8M DH</p>
-                </div>
-                <div>
-                  <p className="text-[10px] text-on-surface-variant uppercase font-bold tracking-wider mb-1">Rendement Proj.</p>
-                  <p className="text-lg font-headline font-extrabold text-secondary">6.5%</p>
-                </div>
-              </div>
-            </div>
-            <div className="mt-8 flex items-center justify-between gap-4">
-              <div className="flex items-center gap-2 text-xs font-semibold text-on-surface-variant">
-                <span className="material-symbols-outlined text-sm" data-icon="visibility">visibility</span>
-                4.2k vues
-              </div>
-              <button className="bg-gradient-to-br from-secondary to-[#217128] text-white px-6 py-3 rounded-lg font-bold text-sm shadow-md hover:shadow-xl transition-all active:scale-95 flex items-center gap-2">
-                Analyser l'opportunité
-                <span className="material-symbols-outlined text-sm" data-icon="insights">insights</span>
-              </button>
-            </div>
-          </div>
-        </div>
-        {/* Card 3: Agadir */}
-        <div className="group bg-surface-container-lowest rounded-xl overflow-hidden flex flex-col md:flex-row transition-all hover:translate-y-[-4px] shadow-[0_12px_40px_rgba(26,28,29,0.06)] border border-transparent hover:border-outline-variant/15">
-          <div className="w-full md:w-5/12 relative overflow-hidden">
-            <img className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-110" data-alt="contemporary eco-friendly resort architecture with wooden accents and lush palms in agadir morocco" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBZcGyzSCgUtmI6tV6VJ1-sx7HswGEC_cmIAH5o3AbRnmuRAylC6lbIHE0099wrGkDCoo0yY9EIIqSbMBkZNl2X5sFZHOsfSew9aEstUAgUqqkLdJl-vgBl_0PujfHyUx2YuE3RqHnaXnxvR88pcfPtmuAhB5Q9Mb0UBLVBlxyW6maKTrSBR5HHUqIoXY7yzF7OlCR8-E8U95s_89kxSTg8AfND-Zi602rFnNdgigzo4CxRLeGRKphMJzcbGNnfI-dr1jdN7gnvYmom" />
-          </div>
-          <div className="flex-1 p-8 flex flex-col justify-between">
-            <div>
-              <div className="flex justify-between items-start mb-4">
-                <div>
-                  <h3 className="text-xl font-headline font-bold text-on-surface tracking-tight">Taghazout Eco-Village</h3>
-                  <div className="flex items-center gap-1 text-on-surface-variant mt-1">
-                    <span className="material-symbols-outlined text-sm" data-icon="location_on">location_on</span>
-                    <span className="text-sm font-medium">Agadir, Taghazout Bay</span>
-                  </div>
-                </div>
-                <div className="bg-secondary/10 text-secondary p-3 rounded-xl text-center">
-                  <p className="text-[10px] font-bold uppercase leading-none mb-1">Score IA</p>
-                  <p className="text-2xl font-headline font-black leading-none">91</p>
-                </div>
-              </div>
-              <div className="mt-6 flex gap-6">
-                <div>
-                  <p className="text-[10px] text-on-surface-variant uppercase font-bold tracking-wider mb-1">Prix Estimé</p>
-                  <p className="text-lg font-headline font-extrabold text-primary">8.9M DH</p>
-                </div>
-                <div>
-                  <p className="text-[10px] text-on-surface-variant uppercase font-bold tracking-wider mb-1">Rendement Proj.</p>
-                  <p className="text-lg font-headline font-extrabold text-secondary">9.4%</p>
-                </div>
-              </div>
-            </div>
-            <div className="mt-8 flex items-center justify-between gap-4">
-              <span className="text-xs text-on-error-container bg-error-container px-2 py-1 rounded font-bold">Rare</span>
-              <button className="bg-gradient-to-br from-secondary to-[#217128] text-white px-6 py-3 rounded-lg font-bold text-sm shadow-md hover:shadow-xl transition-all active:scale-95 flex items-center gap-2">
-                Analyser l'opportunité
-                <span className="material-symbols-outlined text-sm" data-icon="analytics">analytics</span>
-              </button>
-            </div>
-          </div>
-        </div>
-        {/* Analysis Sidebar Mockup */}
-        <div className="bg-primary p-8 rounded-xl flex flex-col justify-between text-white shadow-2xl relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-64 h-64 bg-secondary/20 rounded-full blur-[80px] -mr-32 -mt-32" />
-          <div>
-            <div className="flex items-center gap-3 mb-6">
-              <span className="material-symbols-outlined text-3xl" data-icon="query_stats">query_stats</span>
-              <h4 className="text-xl font-headline font-bold">Moteur de Recommandation v4.2</h4>
-            </div>
-            <p className="text-primary-fixed opacity-80 leading-relaxed mb-8">Notre algorithme analyse 124 points de données incluant la proximité des infrastructures, les permis de construire en attente et les prévisions de croissance touristique.</p>
-            <div className="space-y-6">
-              <div className="flex items-center justify-between border-b border-white/10 pb-4">
-                <span className="text-sm font-medium">Confiance Prédictive</span>
-                <span className="font-bold text-secondary-fixed">Excellente (98%)</span>
-              </div>
-              <div className="flex items-center justify-between border-b border-white/10 pb-4">
-                <span className="text-sm font-medium">Volatilité Régionale</span>
-                <span className="font-bold text-secondary-fixed text-sm">Très Faible</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">Horizon d'Exclusivité</span>
-                <span className="font-bold text-secondary-fixed">48 Heures restantes</span>
-              </div>
-            </div>
-          </div>
-          <div className="mt-12 bg-white/10 p-6 rounded-xl border border-white/5">
-            <p className="text-xs uppercase font-bold tracking-widest text-primary-fixed mb-4">Statistiques du Marché</p>
-            <div className="flex items-end gap-2 h-24">
-              <div className="flex-1 bg-secondary-container h-[40%] rounded-t-sm" />
-              <div className="flex-1 bg-secondary-container h-[60%] rounded-t-sm" />
-              <div className="flex-1 bg-secondary-container h-[85%] rounded-t-sm" />
-              <div className="flex-1 bg-secondary h-[100%] rounded-t-sm" />
-              <div className="flex-1 bg-secondary-container h-[70%] rounded-t-sm" />
-              <div className="flex-1 bg-secondary-container h-[90%] rounded-t-sm" />
-            </div>
-            <p className="mt-4 text-xs text-center opacity-60">Évolution de la demande (6 derniers mois)</p>
-          </div>
-        </div>
-      </div>
-    </section>
-    {/* Map Overview / Geographic Data */}
-    <section className="px-12 pb-24">
-      <div className="bg-surface-container p-1 rounded-2xl h-[400px] relative overflow-hidden shadow-inner">
-        <div className="absolute inset-0 bg-cover bg-center grayscale contrast-125 opacity-40 mix-blend-multiply" data-alt="simplified stylistic map of morocco highlighting major cities and economic hubs with architectural landmarks" data-location="Morocco" style={{backgroundImage: 'url("https://lh3.googleusercontent.com/aida-public/AB6AXuBP55Bc5MfLLxh8BxXYanmPFIIHio4uENfaQfbWO4FXbvF4cMJsQcXf7GohayYhfNKGxkCqKUuBWahV-JvyCaVwuIrDmC_6F6u22GcvRna9ZUqLySdrN89zhZDKzrZniwM-8ehlU4TZTvvxycvSxIF7fsDwbzNJUavLMmv49_rctBIuO_d7O1G6aJMez8OGLlmsXawHP1BcHeRK89pICKPY5jvRnEdxIAMW86cj943-apMzDFmIqkXLinmoVZq4hqWk_DflnGJbuScM")'}} />
-        {/* Floating Map Overlays */}
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-          <div className="relative w-full h-full">
-            <div className="absolute top-[20%] left-[45%] bg-white p-2 rounded-xl shadow-xl border-b-2 border-secondary flex items-center gap-3 animate-pulse pointer-events-auto cursor-pointer">
-              <div className="w-2 h-2 bg-secondary rounded-full" />
-              <span className="text-xs font-bold text-primary">Opportunité Tanger</span>
-            </div>
-            <div className="absolute top-[60%] left-[35%] bg-white p-2 rounded-xl shadow-xl border-b-2 border-primary flex items-center gap-3 pointer-events-auto cursor-pointer">
-              <div className="w-2 h-2 bg-primary rounded-full" />
-              <span className="text-xs font-bold text-primary">Focus Casablanca</span>
-            </div>
-            <div className="absolute top-[80%] left-[25%] bg-white p-2 rounded-xl shadow-xl border-b-2 border-tertiary-container flex items-center gap-3 pointer-events-auto cursor-pointer">
-              <div className="w-2 h-2 bg-tertiary-container rounded-full" />
-              <span className="text-xs font-bold text-primary">Secteur Agadir</span>
-            </div>
-          </div>
-        </div>
-        <div className="absolute bottom-6 right-6 bg-white p-4 rounded-xl shadow-2xl border border-outline-variant/15 w-64">
-          <h5 className="text-xs font-bold text-on-surface uppercase mb-3">Intelligence Territoriale</h5>
-          <div className="space-y-3">
-            <div className="flex justify-between items-center">
-              <span className="text-xs text-on-surface-variant">Flux Nord (Med)</span>
-              <span className="text-xs font-bold text-secondary">+12.4%</span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-xs text-on-surface-variant">Axe Casa-Rabat</span>
-              <span className="text-xs font-bold text-primary">+8.1%</span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-xs text-on-surface-variant">Secteur Souss-Massa</span>
-              <span className="text-xs font-bold text-secondary">+5.9%</span>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-  </main>
-  {/* Floating Action Button - Only for Recommandations Context */}
-  <div className="fixed bottom-8 right-8 z-[60]">
-    <button className="bg-primary text-white w-14 h-14 rounded-full shadow-2xl flex items-center justify-center hover:scale-110 active:scale-90 transition-transform">
-      <span className="material-symbols-outlined" data-icon="smart_toy">smart_toy</span>
-    </button>
-  </div>
-</div>
 
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="rounded-xl bg-surface-container-low px-4 py-3 text-sm font-semibold text-on-surface-variant">
+              Actualisé le {formatDate(overview.refreshed_at)}
+            </div>
+            <Link
+              className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-bold text-white shadow-sm"
+              to="/estimation-immobiliere-ia"
+            >
+              <span className="material-symbols-outlined text-base">calculate</span>
+              Lancer une estimation
+            </Link>
+          </div>
+        </section>
+
+        {error && (
+          <div className="mb-8 rounded-xl border border-error/20 bg-error-container px-5 py-4 text-sm font-semibold text-error">
+            {error}
+          </div>
+        )}
+
+        <section className="mb-8 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5">
+          <MetricCard label="Opportunités filtrées" value={String(filteredOpportunities.length)} />
+          <MetricCard label="Signaux prioritaires" value={String(priorityOpportunities)} />
+          <MetricCard label="Score moyen IA" value={formatPercent(averageOpportunityScore)} />
+          <MetricCard
+            label="Recommandations ouvertes"
+            value={String(overview.recommendations_open || filteredRecommendations.length)}
+          />
+        </section>
+
+        <section className="mb-8 rounded-2xl bg-surface-container-lowest p-5 md:p-6 shadow-[0_12px_40px_rgba(26,28,29,0.06)]">
+          <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-4 gap-4">
+            <label className="block md:col-span-2">
+              <span className="mb-2 block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">
+                Recherche globale
+              </span>
+              <div className="relative">
+                <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-base">
+                  search
+                </span>
+                <input
+                  className="w-full rounded-xl border-none bg-surface-container-low py-3 pl-10 pr-4 text-sm focus:ring-2 focus:ring-secondary/20"
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="Titre, ville, organisation, actif..."
+                  type="text"
+                  value={query}
+                />
+              </div>
+            </label>
+
+            <label className="block">
+              <span className="mb-2 block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">
+                Signal
+              </span>
+              <select
+                className="w-full rounded-xl border-none bg-surface-container-low px-4 py-3 text-sm focus:ring-2 focus:ring-secondary/20"
+                onChange={(event) => setSelectedSignal(event.target.value)}
+                value={selectedSignal}
+              >
+                <option value="all">Tous</option>
+                <option value="strong_buy">Prioritaire</option>
+                <option value="watchlist">À surveiller</option>
+                <option value="neutral">Équilibré</option>
+                <option value="avoid">Risque élevé</option>
+              </select>
+            </label>
+
+            <label className="block">
+              <span className="mb-2 block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">
+                Source ETL
+              </span>
+              <select
+                className="w-full rounded-xl border-none bg-surface-container-low px-4 py-3 text-sm focus:ring-2 focus:ring-secondary/20"
+                onChange={(event) => setSelectedSource(event.target.value)}
+                value={selectedSource}
+              >
+                <option value="all">Toutes</option>
+                <option value="avito">Avito</option>
+                <option value="mubawab">Mubawab</option>
+              </select>
+            </label>
+          </div>
+        </section>
+
+        <section className="grid grid-cols-1 2xl:grid-cols-[minmax(0,1.75fr)_380px] gap-8">
+          <div className="space-y-8">
+            <div>
+              <div className="mb-5 flex items-center justify-between gap-4">
+                <div>
+                  <h2 className="text-2xl font-headline font-bold text-primary">Opportunités marché</h2>
+                  <p className="mt-1 text-sm text-on-surface-variant">
+                    Résultats issus de l’ETL continu et scorés par les modèles ML.
+                  </p>
+                </div>
+                <span className="rounded-full bg-surface-container-low px-4 py-2 text-xs font-bold uppercase tracking-widest text-on-surface-variant">
+                  {overview.market_listings} annonces indexées
+                </span>
+              </div>
+
+              {isLoading ? (
+                <div className="rounded-2xl bg-white p-8 text-sm font-semibold text-on-surface-variant shadow-sm">
+                  Analyse des opportunités en cours...
+                </div>
+              ) : filteredOpportunities.length === 0 ? (
+                <div className="rounded-2xl bg-white p-8 text-sm font-semibold text-on-surface-variant shadow-sm">
+                  Aucune opportunité ne correspond aux filtres actuels.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                  {filteredOpportunities.map((opportunity) => (
+                    <article
+                      className="overflow-hidden rounded-2xl border border-slate-200/60 bg-white shadow-sm"
+                      key={opportunity.id}
+                    >
+                      <div className="aspect-[16/10] bg-surface-container-low overflow-hidden">
+                        {opportunity.primary_image_url ? (
+                          <img
+                            alt={opportunity.title}
+                            className="h-full w-full object-cover transition-transform duration-500 hover:scale-105"
+                            src={opportunity.primary_image_url}
+                          />
+                        ) : (
+                          <div
+                            className={`flex h-full w-full flex-col justify-between bg-gradient-to-br ${cityGradient(opportunity.city)} p-6 text-white`}
+                          >
+                            <span className="text-[10px] font-bold uppercase tracking-[0.24em] opacity-80">
+                              {opportunity.source}
+                            </span>
+                            <div>
+                              <p className="text-2xl font-headline font-extrabold">
+                                {opportunity.city || "Maroc"}
+                              </p>
+                              <p className="text-sm opacity-85">
+                                {opportunity.district || "Opportunité marché"}
+                              </p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="p-6">
+                        <div className="mb-4 flex flex-wrap items-center gap-2">
+                          <span className="rounded-full bg-secondary-container px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-secondary">
+                            {signalLabel(opportunity.signal)}
+                          </span>
+                          <span className="rounded-full bg-surface-container-low px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">
+                            {opportunity.source}
+                          </span>
+                          <span className="text-[11px] font-medium text-on-surface-variant">
+                            {relativeDate(opportunity.last_seen_at)}
+                          </span>
+                        </div>
+
+                        <div className="mb-5 flex items-start justify-between gap-4">
+                          <div>
+                            <h3 className="text-xl font-headline font-bold text-primary line-clamp-2">
+                              {opportunity.title}
+                            </h3>
+                            <p className="mt-1 text-sm text-on-surface-variant">
+                              {opportunity.district
+                                ? `${opportunity.district}, ${opportunity.city}`
+                                : opportunity.city || "Ville non précisée"}
+                            </p>
+                          </div>
+                          <div className="rounded-2xl bg-primary px-4 py-3 text-white">
+                            <p className="text-[10px] font-bold uppercase tracking-widest opacity-70">Score</p>
+                            <p className="text-xl font-headline font-extrabold">
+                              {formatPercent(opportunity.score)}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3 text-sm">
+                          <DataPill label="Prix annonce" value={formatMoney(opportunity.price, true)} />
+                          <DataPill label="Valeur ML" value={formatMoney(opportunity.estimated_value, true)} />
+                          <DataPill label="Décote marché" value={formatPercent(opportunity.market_discount_percent)} />
+                          <DataPill label="Confiance" value={formatPercent(opportunity.confidence_score)} />
+                        </div>
+
+                        <div className="mt-5 flex items-center justify-between gap-4">
+                          <span className="text-xs font-medium text-on-surface-variant">
+                            {opportunity.area_sqm ? `${toNumber(opportunity.area_sqm)} m²` : "Surface N/A"}
+                          </span>
+                          <a
+                            className="inline-flex items-center gap-2 text-sm font-bold text-secondary hover:underline"
+                            href={opportunity.external_url}
+                            rel="noreferrer"
+                            target="_blank"
+                          >
+                            Voir l'annonce
+                            <span className="material-symbols-outlined text-base">open_in_new</span>
+                          </a>
+                        </div>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div>
+              <div className="mb-5">
+                <h2 className="text-2xl font-headline font-bold text-primary">Recommandations sauvegardées</h2>
+                <p className="mt-1 text-sm text-on-surface-variant">
+                  Actions déjà enregistrées dans la base pour vos organisations visibles.
+                </p>
+              </div>
+
+              {filteredRecommendations.length === 0 ? (
+                <div className="rounded-2xl bg-white p-8 text-sm font-semibold text-on-surface-variant shadow-sm">
+                  Aucune recommandation sauvegardée pour le moment.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
+                  {filteredRecommendations.map((recommendation) => (
+                    <article
+                      className="rounded-2xl border border-slate-200/60 bg-white p-6 shadow-sm"
+                      key={recommendation.id}
+                    >
+                      <div className="mb-4 flex flex-wrap items-center gap-2">
+                        <span className="rounded-full bg-surface-container-low px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">
+                          {categoryLabel(recommendation.category)}
+                        </span>
+                        <span className="rounded-full bg-secondary-container px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-secondary">
+                          Priorité {priorityLabel(recommendation.priority)}
+                        </span>
+                        <span className="rounded-full bg-primary-container px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-primary">
+                          {statusLabel(recommendation.status)}
+                        </span>
+                      </div>
+
+                      <h3 className="text-lg font-headline font-bold text-primary">
+                        {recommendation.title}
+                      </h3>
+                      <p className="mt-2 text-sm leading-relaxed text-on-surface-variant">
+                        {recommendation.description}
+                      </p>
+
+                      <div className="mt-5 grid grid-cols-2 gap-3 text-sm">
+                        <DataPill label="Organisation" value={recommendation.organization_name} />
+                        <DataPill
+                          label="Actif"
+                          value={recommendation.asset_name || "Portefeuille global"}
+                        />
+                        <DataPill
+                          label="ROI attendu"
+                          value={
+                            recommendation.expected_roi === null
+                              ? "N/A"
+                              : formatPercent(recommendation.expected_roi)
+                          }
+                        />
+                        <DataPill
+                          label="Confiance"
+                          value={
+                            recommendation.confidence_score === null
+                              ? "N/A"
+                              : formatPercent(recommendation.confidence_score)
+                          }
+                        />
+                      </div>
+
+                      {recommendation.action_items.length > 0 && (
+                        <ul className="mt-5 space-y-2 text-sm text-on-surface-variant">
+                          {recommendation.action_items.slice(0, 3).map((item) => (
+                            <li className="flex items-start gap-2" key={item}>
+                              <span className="material-symbols-outlined mt-0.5 text-base text-secondary">
+                                arrow_right_alt
+                              </span>
+                              <span>{item}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+
+                      <p className="mt-5 text-[11px] font-medium uppercase tracking-widest text-on-surface-variant">
+                        Créée le {formatDate(recommendation.created_at)}
+                      </p>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <aside className="space-y-6">
+            <section className="rounded-2xl bg-primary p-7 text-white shadow-[0_18px_40px_rgba(26,35,126,0.2)]">
+              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-primary-fixed-dim">
+                Intelligence marché
+              </p>
+              <h2 className="mt-3 text-2xl font-headline font-extrabold">
+                Le moteur IA reste alimenté en continu
+              </h2>
+              <p className="mt-4 text-sm leading-relaxed text-primary-fixed">
+                Les recommandations dépendent des nouvelles annonces ETL, des comparables ML et des
+                signaux de valorisation générés depuis la base.
+              </p>
+
+              <div className="mt-6 space-y-4">
+                <DataRow label="Prix moyen marché / m²" value={formatMoney(overview.average_market_price_per_sqm)} />
+                <DataRow label="Opportunités en file" value={String(overview.opportunities.length)} />
+                <DataRow label="Recommandations ouvertes" value={String(overview.recommendations_open)} />
+              </div>
+            </section>
+
+            <section className="rounded-2xl bg-white p-6 shadow-sm">
+              <div className="mb-5 flex items-center justify-between">
+                <h3 className="text-lg font-headline font-bold text-primary">Villes suivies</h3>
+                <span className="text-xs font-semibold text-on-surface-variant">
+                  {overview.market_cities.length} zones
+                </span>
+              </div>
+
+              <div className="space-y-4">
+                {overview.market_cities.length === 0 ? (
+                  <p className="text-sm text-on-surface-variant">
+                    Les statistiques ville apparaîtront après le prochain cycle ETL.
+                  </p>
+                ) : (
+                  overview.market_cities.map((city) => (
+                    <div key={city.city}>
+                      <div className="mb-2 flex items-center justify-between text-sm">
+                        <span className="font-bold text-primary">{city.city}</span>
+                        <span className="text-on-surface-variant">
+                          {city.listing_count ?? 0} annonces
+                        </span>
+                      </div>
+                      <div className="h-2 overflow-hidden rounded-full bg-surface-container-low">
+                        <div
+                          className="h-full rounded-full bg-secondary"
+                          style={{
+                            width: `${Math.min(
+                              100,
+                              Math.max(
+                                12,
+                                ((city.listing_count ?? 0) /
+                                  Math.max(1, overview.market_listings || 1)) *
+                                  100,
+                              ),
+                            )}%`,
+                          }}
+                        />
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </section>
+
+            <section className="rounded-2xl bg-white p-6 shadow-sm">
+              <h3 className="text-lg font-headline font-bold text-primary">Enchaînement conseillé</h3>
+              <div className="mt-5 space-y-4">
+                {[
+                  "Surveiller les nouvelles annonces ETL par ville.",
+                  "Comparer prix annoncé et valeur estimée ML.",
+                  "Sauvegarder les estimations prometteuses.",
+                  "Convertir les meilleurs cas en scénario d'investissement.",
+                ].map((step, index) => (
+                  <div className="flex items-start gap-3" key={step}>
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-secondary-container text-sm font-bold text-secondary">
+                      {index + 1}
+                    </div>
+                    <p className="pt-1 text-sm leading-relaxed text-on-surface-variant">{step}</p>
+                  </div>
+                ))}
+              </div>
+            </section>
+          </aside>
+        </section>
+          </>
+        )}
+      </main>
     </ImportedPageDocument>
+  );
+}
+
+function MetricCard({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-2xl bg-surface-container-lowest p-6 shadow-[0_12px_40px_rgba(26,28,29,0.06)]">
+      <p className="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">{label}</p>
+      <p className="mt-3 text-3xl font-headline font-extrabold text-primary">{value}</p>
+    </div>
+  );
+}
+
+function DataPill({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl bg-surface-container-low px-4 py-3">
+      <p className="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">{label}</p>
+      <p className="mt-1 font-bold text-primary">{value}</p>
+    </div>
+  );
+}
+
+function DataRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between gap-4 border-b border-white/10 pb-4 text-sm">
+      <span className="text-primary-fixed">{label}</span>
+      <span className="font-bold text-white">{value}</span>
+    </div>
   );
 }
