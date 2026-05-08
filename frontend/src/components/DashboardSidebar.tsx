@@ -65,7 +65,7 @@ export default function DashboardSidebar() {
       <aside className="smartestate-dashboard-sidebar hidden md:flex h-screen w-72 fixed left-0 top-0 border-r border-[#c6c5d4]/15 bg-[#ffffff] flex-col z-[70]">
         <div className="px-8 py-10">
           <Link
-            className="text-xl font-headline font-bold tracking-tighter text-primary uppercase"
+            className="text-xl font-headline font-black tracking-tighter text-primary uppercase"
             to="/tableau-de-bord-executif"
           >
             SmartEstate
@@ -130,7 +130,7 @@ export default function DashboardSidebar() {
 
       <header className="smartestate-mobile-dashboard-nav fixed left-0 right-0 top-0 z-[70] md:hidden bg-white/95 border-b border-[#c6c5d4]/15">
         <div className="flex items-center justify-between px-4 py-3">
-          <Link className="font-headline font-bold tracking-tighter text-primary uppercase" to="/tableau-de-bord-executif">
+          <Link className="font-headline font-black tracking-tighter text-primary uppercase" to="/tableau-de-bord-executif">
             SmartEstate
           </Link>
           <Link

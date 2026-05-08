@@ -16,7 +16,7 @@ export default function HomePage() {
   <header className="fixed top-0 left-0 right-0 z-50 bg-surface/80 backdrop-blur-xl border-b border-outline-variant/20">
     <div className="max-w-7xl mx-auto px-6 py-4 flex flex-row items-center justify-between">
       <div className="flex flex-row items-center gap-10">
-        <span className="text-xl font-bold tracking-tighter text-[#1A237E] font-headline">SmartEstate</span>
+        <span className="text-xl font-black tracking-tighter text-[#1A237E] font-headline">SmartEstate</span>
         <nav className="hidden md:flex flex-row items-center gap-8">
           <a className="text-[#1b6d24] border-b-2 border-[#1b6d24] pb-1 font-semibold text-sm" href="#">Plateforme</a>
           <a className="text-[#454652] hover:text-[#1b6d24] font-semibold text-sm transition-colors" href="#how-it-works">Méthodologie</a>

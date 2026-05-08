@@ -14,7 +14,7 @@ export function AppLoadingScreen({
         <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-full bg-primary text-white">
           <span className="material-symbols-outlined text-[28px]">hourglass_top</span>
         </div>
-        <p className="font-headline text-3xl font-bold text-primary">SmartEstate</p>
+        <p className="font-headline text-3xl font-black text-primary">SmartEstate</p>
         <div className="mx-auto mt-5 h-1 w-32 overflow-hidden rounded-full bg-surface-container-low">
           <div className="smartestate-loader-bar h-full rounded-full bg-secondary" />
         </div>

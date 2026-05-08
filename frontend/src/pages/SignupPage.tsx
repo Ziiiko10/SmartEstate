@@ -151,7 +151,7 @@ export default function SignupPage() {
           <div className="w-full max-w-md">
             <div className="mb-12 flex items-center gap-3 lg:hidden">
               <span className="material-symbols-outlined text-3xl text-primary">domain</span>
-              <span className="font-headline text-2xl font-bold tracking-tighter text-primary">
+              <span className="font-headline text-2xl font-black tracking-tighter text-primary">
                 SmartEstate Morocco
               </span>
             </div>
