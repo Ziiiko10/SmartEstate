@@ -58,9 +58,11 @@ type MarketListing = {
   district: string;
   external_url: string;
   id: number;
+  image_urls: string[];
   last_seen_at: string;
   price: string | null;
   price_per_sqm: number | null;
+  primary_image_url: string;
   source: string;
   title: string;
   transaction_type: string;
@@ -445,7 +447,7 @@ export default function PortfolioMarocPage() {
                 <h3 className="text-2xl font-headline font-bold text-primary">Annonces marche indexees</h3>
                 <p className="mt-2 text-sm text-on-surface-variant">Ce bloc vient de `GET /api/market-listings/` et montre les donnees ETL recuperees depuis Avito et Mubawab.</p>
               </div>
-              <a className="text-secondary font-bold text-sm hover:underline" href="/tableau-de-bord-executif">Voir le dashboard complet</a>
+              <a className="text-secondary font-bold text-sm hover:underline" href="/annonces-etl">Voir toutes les annonces ETL</a>
             </div>
 
             {filteredListings.length === 0 ? (
@@ -453,31 +455,50 @@ export default function PortfolioMarocPage() {
             ) : (
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {filteredListings.slice(0, 6).map((listing) => (
-                  <article className="rounded-2xl border border-slate-200/60 bg-white p-6 shadow-sm" key={listing.id}>
-                    <div className="flex items-start justify-between gap-4 mb-4">
-                      <div>
-                        <p className="text-[10px] uppercase tracking-[0.22em] font-bold text-secondary">{listing.source}</p>
-                        <h4 className="mt-2 text-lg font-headline font-bold text-primary line-clamp-2">{listing.title}</h4>
+                  <article className="rounded-2xl border border-slate-200/60 bg-white overflow-hidden shadow-sm" key={listing.id}>
+                    <div className="aspect-[16/10] bg-surface-container-low overflow-hidden">
+                      {listing.primary_image_url ? (
+                        <img
+                          alt={listing.title}
+                          className="h-full w-full object-cover transition-transform duration-500 hover:scale-105"
+                          src={listing.primary_image_url}
+                        />
+                      ) : (
+                        <div className={`h-full w-full bg-gradient-to-br ${cityGradient(listing.city)} p-6 text-white flex flex-col justify-between`}>
+                          <span className="text-[10px] uppercase tracking-[0.22em] font-bold opacity-80">{listing.source}</span>
+                          <div>
+                            <p className="text-2xl font-headline font-extrabold">{listing.city || "Maroc"}</p>
+                            <p className="text-sm opacity-80">{listing.district || "Annonce ETL"}</p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    <div className="p-6">
+                      <div className="flex items-start justify-between gap-4 mb-4">
+                        <div>
+                          <p className="text-[10px] uppercase tracking-[0.22em] font-bold text-secondary">{listing.source}</p>
+                          <h4 className="mt-2 text-lg font-headline font-bold text-primary line-clamp-2">{listing.title}</h4>
+                        </div>
+                        <span className="rounded-full bg-surface-container-low px-3 py-1 text-[10px] font-bold text-on-surface-variant">
+                          {relativeDate(listing.last_seen_at)}
+                        </span>
                       </div>
-                      <span className="rounded-full bg-surface-container-low px-3 py-1 text-[10px] font-bold text-on-surface-variant">
-                        {relativeDate(listing.last_seen_at)}
-                      </span>
+                      <div className="space-y-2 text-sm text-on-surface-variant">
+                        <p>{listing.district ? `${listing.district}, ${listing.city}` : listing.city}</p>
+                        <p>Prix: {formatMoney(listing.price)}</p>
+                        <p>Surface: {listing.area_sqm ? `${listing.area_sqm} m²` : "N/A"}</p>
+                        <p>Prix / m²: {listing.price_per_sqm ? formatMoney(listing.price_per_sqm, false) : "N/A"}</p>
+                      </div>
+                      <a
+                        className="mt-5 inline-flex items-center gap-2 text-sm font-bold text-secondary hover:underline"
+                        href={listing.external_url}
+                        rel="noreferrer"
+                        target="_blank"
+                      >
+                        Ouvrir l'annonce
+                        <span className="material-symbols-outlined text-base">open_in_new</span>
+                      </a>
                     </div>
-                    <div className="space-y-2 text-sm text-on-surface-variant">
-                      <p>{listing.district ? `${listing.district}, ${listing.city}` : listing.city}</p>
-                      <p>Prix: {formatMoney(listing.price)}</p>
-                      <p>Surface: {listing.area_sqm ? `${listing.area_sqm} m²` : "N/A"}</p>
-                      <p>Prix / m²: {listing.price_per_sqm ? formatMoney(listing.price_per_sqm, false) : "N/A"}</p>
-                    </div>
-                    <a
-                      className="mt-5 inline-flex items-center gap-2 text-sm font-bold text-secondary hover:underline"
-                      href={listing.external_url}
-                      rel="noreferrer"
-                      target="_blank"
-                    >
-                      Ouvrir l'annonce
-                      <span className="material-symbols-outlined text-base">open_in_new</span>
-                    </a>
                   </article>
                 ))}
               </div>

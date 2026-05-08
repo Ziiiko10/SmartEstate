@@ -6,6 +6,7 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import ExecutiveDashboardPage from "./pages/ExecutiveDashboardPage";
 import HomePage from "./pages/HomePage";
 import LoginPage from "./pages/LoginPage";
+import MarketListingsPage from "./pages/MarketListingsPage";
 import PageCatalogPage from "./pages/PageCatalogPage";
 import PortfolioMarocPage from "./pages/PortfolioMarocPage";
 import ReportsPage from "./pages/ReportsPage";
@@ -87,6 +88,14 @@ export default function App() {
         element={
           <ProtectedRoute>
             <PortfolioMarocPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/annonces-etl"
+        element={
+          <ProtectedRoute>
+            <MarketListingsPage />
           </ProtectedRoute>
         }
       />

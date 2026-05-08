@@ -151,22 +151,24 @@ La commande `scrape_market_listings` extrait les annonces immobilieres depuis Av
 ```powershell
 cd backend
 .\.venv\Scripts\python.exe manage.py migrate
-.\.venv\Scripts\python.exe manage.py scrape_market_listings --source all --pages 1 --limit 20 --sleep 1
+.\.venv\Scripts\python.exe manage.py scrape_market_listings --source all --pages 5 --limit 20 --sleep 1
 ```
 
-Mode continu:
+Mode continu pour importer uniquement les nouvelles annonces:
 
 ```powershell
-.\.venv\Scripts\python.exe manage.py scrape_market_listings --source all --pages 1 --limit 40 --sleep 1 --interval 1800 --loop
+.\.venv\Scripts\python.exe manage.py scrape_market_listings --source all --pages 50 --new-only --stop-after-existing 30 --sleep 1 --interval 1800 --loop
 ```
 
-Avec Docker, le service `market-etl` tourne en continu et relance le scraping selon `MARKET_ETL_INTERVAL_SECONDS`.
+Avec Docker, le service `market-etl` tourne en continu en mode `--new-only`: il ignore les URLs deja presentes en base, scrape seulement les nouvelles annonces, puis s'arrete quand il rencontre `MARKET_ETL_STOP_AFTER_EXISTING` annonces deja connues consecutives.
 
 Options utiles:
 
 - `--source avito|mubawab|all`
-- `--pages 2` pour parcourir plusieurs pages par source
+- `--pages 50` pour parcourir plusieurs pages par source
 - `--limit 50` pour limiter le nombre d'annonces detaillees
+- `--new-only` pour importer uniquement les nouvelles URLs
+- `--stop-after-existing 30` pour stopper une source apres 30 annonces deja connues consecutives
 - `--city Casablanca` et `--transaction-type sale|rent|vacation` pour filtrer apres extraction
 - `--dry-run` pour tester sans ecriture en base
 - `--avito-url` et `--mubawab-url` pour remplacer les URLs de depart si les pages changent

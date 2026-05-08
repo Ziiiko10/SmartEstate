@@ -28,8 +28,10 @@ type MlComparable = {
   district: string;
   external_url: string;
   id: number | null;
+  image_urls: string[];
   price: ApiNumber;
   price_per_sqm: ApiNumber;
+  primary_image_url: string;
   similarity_score: ApiNumber;
   source: string;
   title: string;
@@ -560,22 +562,41 @@ export default function AiEstimationPage() {
                 </div>
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
                   {(result?.comparables ?? []).slice(0, 6).map((comparable) => (
-                    <article className="bg-surface-container-lowest rounded-xl p-5 shadow-sm border border-outline-variant/10" key={`${comparable.source}-${comparable.id ?? comparable.external_url}`}>
-                      <div className="flex items-start justify-between gap-4 mb-4">
-                        <div>
-                          <h3 className="font-headline font-bold text-primary line-clamp-2">{comparable.title || "Annonce marché"}</h3>
-                          <p className="text-[10px] uppercase font-bold text-on-surface-variant">
-                            {comparable.source} · {comparable.city || "Maroc"} {comparable.district ? `· ${comparable.district}` : ""}
-                          </p>
-                        </div>
-                        <span className="rounded-full bg-secondary-container px-3 py-1 text-[10px] font-bold text-secondary">
-                          {formatPercent(toNumber(comparable.similarity_score) * 100)}
-                        </span>
+                    <article className="bg-surface-container-lowest rounded-xl overflow-hidden shadow-sm border border-outline-variant/10" key={`${comparable.source}-${comparable.id ?? comparable.external_url}`}>
+                      <div className="aspect-[16/10] bg-surface-container-low">
+                        {comparable.primary_image_url ? (
+                          <img
+                            alt={comparable.title || "Comparable"}
+                            className="h-full w-full object-cover"
+                            src={comparable.primary_image_url}
+                          />
+                        ) : (
+                          <div className="h-full w-full bg-gradient-to-br from-primary to-secondary text-white p-5 flex flex-col justify-between">
+                            <span className="text-[10px] uppercase tracking-[0.22em] font-bold opacity-75">{comparable.source}</span>
+                            <div>
+                              <p className="text-2xl font-headline font-extrabold">{comparable.city || "Maroc"}</p>
+                              <p className="text-sm opacity-80">{comparable.district || "Comparable marché"}</p>
+                            </div>
+                          </div>
+                        )}
                       </div>
-                      <div className="grid grid-cols-3 gap-3 text-xs">
-                        <DataPill label="Prix" value={formatMoney(comparable.price, true)} />
-                        <DataPill label="Surface" value={`${toNumber(comparable.area_sqm).toLocaleString("fr-MA", { maximumFractionDigits: 0 })} m²`} />
-                        <DataPill label="MAD / m²" value={formatMoney(comparable.price_per_sqm)} />
+                      <div className="p-5">
+                        <div className="flex items-start justify-between gap-4 mb-4">
+                          <div>
+                            <h3 className="font-headline font-bold text-primary line-clamp-2">{comparable.title || "Annonce marché"}</h3>
+                            <p className="text-[10px] uppercase font-bold text-on-surface-variant">
+                              {comparable.source} · {comparable.city || "Maroc"} {comparable.district ? `· ${comparable.district}` : ""}
+                            </p>
+                          </div>
+                          <span className="rounded-full bg-secondary-container px-3 py-1 text-[10px] font-bold text-secondary">
+                            {formatPercent(toNumber(comparable.similarity_score) * 100)}
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-3 gap-3 text-xs">
+                          <DataPill label="Prix" value={formatMoney(comparable.price, true)} />
+                          <DataPill label="Surface" value={`${toNumber(comparable.area_sqm).toLocaleString("fr-MA", { maximumFractionDigits: 0 })} m²`} />
+                          <DataPill label="MAD / m²" value={formatMoney(comparable.price_per_sqm)} />
+                        </div>
                       </div>
                     </article>
                   ))}

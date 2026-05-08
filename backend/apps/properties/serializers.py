@@ -38,7 +38,9 @@ class PropertyAssetSerializer(serializers.ModelSerializer):
 
 
 class MarketListingSerializer(serializers.ModelSerializer):
+    image_urls = serializers.SerializerMethodField()
     price_per_sqm = serializers.SerializerMethodField()
+    primary_image_url = serializers.SerializerMethodField()
 
     class Meta:
         model = MarketListing
@@ -56,6 +58,8 @@ class MarketListingSerializer(serializers.ModelSerializer):
             "price",
             "currency",
             "price_period",
+            "image_urls",
+            "primary_image_url",
             "area_sqm",
             "price_per_sqm",
             "bedrooms",
@@ -76,3 +80,9 @@ class MarketListingSerializer(serializers.ModelSerializer):
         if obj.area_sqm == 0:
             return None
         return round(obj.price / obj.area_sqm, 2)
+
+    def get_image_urls(self, obj):
+        return obj.image_urls
+
+    def get_primary_image_url(self, obj):
+        return obj.primary_image_url

@@ -20,6 +20,7 @@ class ImportStats:
     extracted: int = 0
     created: int = 0
     updated: int = 0
+    existing: int = 0
     skipped: int = 0
     errors: int = 0
 
@@ -46,6 +47,8 @@ def run_market_scrape(
     dry_run: bool = False,
     city: str = "",
     transaction_type: str = "",
+    new_only: bool = False,
+    stop_after_existing: int = 30,
     avito_url: str = AVITO_DEFAULT_URL,
     mubawab_url: str = MUBAWAB_DEFAULT_URL,
 ) -> ImportStats:
@@ -62,8 +65,23 @@ def run_market_scrape(
         scraper = scraper_class(start_url=start_url, timeout=timeout)
         remaining = None if limit is None else max(limit - stats.extracted, 0)
         before_errors = len(scraper.errors)
+        before_existing = scraper.skipped_known_urls
+        known_urls = set()
+        if new_only:
+            known_urls = set(
+                MarketListing.objects.filter(source=source_name).values_list(
+                    "external_url",
+                    flat=True,
+                )
+            )
 
-        for listing in scraper.scrape(pages=pages, limit=remaining, sleep_seconds=sleep_seconds):
+        for listing in scraper.scrape(
+            pages=pages,
+            limit=remaining,
+            sleep_seconds=sleep_seconds,
+            known_urls=known_urls,
+            stop_after_known=stop_after_existing if new_only else None,
+        ):
             if wanted_city and normalize_for_match(listing.city) != wanted_city:
                 stats.skipped += 1
                 continue
@@ -81,6 +99,7 @@ def run_market_scrape(
             else:
                 stats.updated += 1
 
+        stats.existing += scraper.skipped_known_urls - before_existing
         stats.errors += len(scraper.errors) - before_errors
 
     return stats

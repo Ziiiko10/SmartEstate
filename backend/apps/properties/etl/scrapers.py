@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from decimal import Decimal, InvalidOperation
 from html import unescape
 from html.parser import HTMLParser
+from http.client import IncompleteRead
 import logging
 import re
 import time
@@ -115,17 +116,37 @@ def normalize_for_match(value: str) -> str:
 
 
 def fetch_html(url: str, timeout: int = 20, user_agent: str = DEFAULT_USER_AGENT) -> str:
-    request = Request(
-        url,
-        headers={
-            "User-Agent": user_agent,
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-            "Accept-Language": "fr-MA,fr;q=0.9,en;q=0.8",
-        },
-    )
-    with urlopen(request, timeout=timeout) as response:
-        charset = response.headers.get_content_charset() or "utf-8"
-        return response.read().decode(charset, errors="replace")
+    last_error: Exception | None = None
+    for attempt in range(3):
+        request = Request(
+            url,
+            headers={
+                "User-Agent": user_agent,
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                "Accept-Language": "fr-MA,fr;q=0.9,en;q=0.8",
+            },
+        )
+        try:
+            with urlopen(request, timeout=timeout) as response:
+                charset = response.headers.get_content_charset() or "utf-8"
+                try:
+                    payload = response.read()
+                except IncompleteRead as exc:
+                    if exc.partial and len(exc.partial) > 2000:
+                        logger.warning("Partial response received for %s; using recovered bytes.", url)
+                        payload = exc.partial
+                    else:
+                        raise
+                return payload.decode(charset, errors="replace")
+        except (HTTPError, URLError, TimeoutError, OSError, UnicodeError, IncompleteRead) as exc:
+            last_error = exc
+            if attempt == 2:
+                raise
+            time.sleep(1 + attempt)
+
+    if last_error:
+        raise last_error
+    return ""
 
 
 def iri_to_uri(url: str) -> str:
@@ -422,16 +443,26 @@ class BaseMarketScraper:
         self.user_agent = user_agent
         self.timeout = timeout
         self.errors: list[str] = []
+        self.skipped_known_urls = 0
 
-    def scrape(self, pages: int = 1, limit: int | None = None, sleep_seconds: float = 1.0) -> Iterable[ScrapedListing]:
+    def scrape(
+        self,
+        pages: int = 1,
+        limit: int | None = None,
+        sleep_seconds: float = 1.0,
+        known_urls: set[str] | None = None,
+        stop_after_known: int | None = None,
+    ) -> Iterable[ScrapedListing]:
         seen_urls: set[str] = set()
+        known_url_set = known_urls or set()
+        consecutive_known = 0
         emitted = 0
 
         for page in range(1, pages + 1):
             page_url = self.page_url(page)
             try:
                 page_html = self.fetcher(page_url, self.timeout, self.user_agent)
-            except (HTTPError, URLError, TimeoutError, OSError, UnicodeError) as exc:
+            except (HTTPError, URLError, TimeoutError, OSError, UnicodeError, IncompleteRead) as exc:
                 message = f"{self.source}: unable to fetch {page_url}: {exc}"
                 self.errors.append(message)
                 logger.warning(message)
@@ -442,6 +473,14 @@ class BaseMarketScraper:
                 if listing_url in seen_urls:
                     continue
                 seen_urls.add(listing_url)
+                if listing_url in known_url_set:
+                    self.skipped_known_urls += 1
+                    consecutive_known += 1
+                    if stop_after_known and consecutive_known >= stop_after_known:
+                        return
+                    continue
+
+                consecutive_known = 0
                 if limit is not None and emitted >= limit:
                     return
                 if sleep_seconds > 0:
@@ -449,7 +488,7 @@ class BaseMarketScraper:
 
                 try:
                     detail_html = self.fetcher(listing_url, self.timeout, self.user_agent)
-                except (HTTPError, URLError, TimeoutError, OSError, UnicodeError) as exc:
+                except (HTTPError, URLError, TimeoutError, OSError, UnicodeError, IncompleteRead) as exc:
                     message = f"{self.source}: unable to fetch {listing_url}: {exc}"
                     self.errors.append(message)
                     logger.warning(message)

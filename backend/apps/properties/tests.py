@@ -1,8 +1,15 @@
 from decimal import Decimal
+from http.client import IncompleteRead
 
 from django.test import SimpleTestCase
 
-from apps.properties.etl.scrapers import AvitoScraper, MubawabScraper, parse_price
+from apps.properties.etl.scrapers import (
+    AvitoScraper,
+    BaseMarketScraper,
+    MubawabScraper,
+    ScrapedListing,
+    parse_price,
+)
 
 
 class MarketListingParserTests(SimpleTestCase):
@@ -22,6 +29,7 @@ class MarketListingParserTests(SimpleTestCase):
         <html>
           <head>
             <meta property="og:description" content="Appartement bien place de 77 m2." />
+            <meta property="og:image" content="https://images.example.com/mubawab-main.jpg" />
           </head>
           <body>
             <h1>A vendre appartement de 77m2 Maarif Extension</h1>
@@ -31,6 +39,7 @@ class MarketListingParserTests(SimpleTestCase):
             <div>3 Pieces</div>
             <div>2 Chambres</div>
             <div>1 Salle de bain</div>
+            <img src="https://images.example.com/mubawab-secondary.jpg" />
           </body>
         </html>
         """
@@ -50,6 +59,13 @@ class MarketListingParserTests(SimpleTestCase):
         self.assertEqual(listing.area_sqm, Decimal("77.00"))
         self.assertEqual(listing.bedrooms, 2)
         self.assertEqual(listing.bathrooms, 1)
+        self.assertEqual(
+            listing.raw_payload["images"][:2],
+            [
+                "https://images.example.com/mubawab-main.jpg",
+                "https://images.example.com/mubawab-secondary.jpg",
+            ],
+        )
 
     def test_parse_avito_listing_detail(self):
         html = """
@@ -80,3 +96,54 @@ class MarketListingParserTests(SimpleTestCase):
         self.assertEqual(listing.area_sqm, Decimal("400.00"))
         self.assertEqual(listing.bedrooms, 4)
         self.assertEqual(listing.bathrooms, 3)
+
+    def test_scrape_records_incomplete_read_without_crashing_cycle(self):
+        def broken_fetcher(url, timeout, user_agent):
+            raise IncompleteRead(b"partial")
+
+        scraper = AvitoScraper(fetcher=broken_fetcher)
+
+        listings = list(scraper.scrape(pages=1, limit=1, sleep_seconds=0))
+
+        self.assertEqual(listings, [])
+        self.assertEqual(len(scraper.errors), 1)
+        self.assertIn("unable to fetch", scraper.errors[0])
+
+    def test_incremental_scrape_skips_known_urls_before_fetching_detail(self):
+        detail_fetches = []
+
+        def fetcher(url, timeout, user_agent):
+            if url == "https://example.com/index":
+                return "<html></html>"
+            detail_fetches.append(url)
+            return "<h1>New listing</h1>"
+
+        scraper = IncrementalTestScraper(fetcher=fetcher)
+
+        listings = list(
+            scraper.scrape(
+                pages=1,
+                known_urls={"https://example.com/known"},
+                stop_after_known=3,
+                sleep_seconds=0,
+            )
+        )
+
+        self.assertEqual(len(listings), 1)
+        self.assertEqual(listings[0].url, "https://example.com/new")
+        self.assertEqual(detail_fetches, ["https://example.com/new"])
+        self.assertEqual(scraper.skipped_known_urls, 1)
+
+
+class IncrementalTestScraper(BaseMarketScraper):
+    source = "test"
+    default_url = "https://example.com/index"
+
+    def extract_listing_urls(self, html: str, base_url: str) -> list[tuple[str, str]]:
+        return [
+            ("https://example.com/known", "Known listing"),
+            ("https://example.com/new", "New listing"),
+        ]
+
+    def parse_listing(self, html: str, url: str, title_hint: str = "") -> ScrapedListing:
+        return ScrapedListing(source=self.source, url=url, title=title_hint)

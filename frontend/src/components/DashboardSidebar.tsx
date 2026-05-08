@@ -15,6 +15,12 @@ const navItems = [
     paths: ["/portfolio-immobilier-maroc"],
   },
   {
+    href: "/annonces-etl",
+    icon: "travel_explore",
+    label: "Annonces ETL",
+    paths: ["/annonces-etl"],
+  },
+  {
     href: "/estimation-immobiliere-ia",
     icon: "calculate",
     label: "Estimation",

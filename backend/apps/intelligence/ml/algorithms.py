@@ -18,6 +18,8 @@ class Comparable:
     source: str
     asset_type: str
     external_url: str
+    image_urls: list[str]
+    primary_image_url: str
     city: str
     district: str
     price: Decimal
@@ -129,6 +131,19 @@ def serialize_model_result(result: dict) -> dict:
     }
 
 
+def listing_images(listing) -> list[str]:
+    images = getattr(listing, "image_urls", None)
+    if isinstance(images, list):
+        return [image for image in images if isinstance(image, str) and image]
+    raw_payload = getattr(listing, "raw_payload", {}) or {}
+    if not isinstance(raw_payload, dict):
+        return []
+    raw_images = raw_payload.get("images", [])
+    if not isinstance(raw_images, list):
+        return []
+    return [image for image in raw_images if isinstance(image, str) and image]
+
+
 def feature_similarity(subject: dict, listing) -> Decimal:
     score = Decimal("0")
     total = Decimal("0")
@@ -202,6 +217,7 @@ def build_comparables(
         if similarity < min_similarity:
             continue
 
+        images = listing_images(listing)
         comparables.append(
             Comparable(
                 id=getattr(listing, "id", None),
@@ -209,6 +225,8 @@ def build_comparables(
                 source=getattr(listing, "source", ""),
                 asset_type=getattr(listing, "asset_type", ""),
                 external_url=getattr(listing, "external_url", ""),
+                image_urls=images,
+                primary_image_url=images[0] if images else "",
                 city=getattr(listing, "city", ""),
                 district=getattr(listing, "district", ""),
                 price=quantize_money(price),

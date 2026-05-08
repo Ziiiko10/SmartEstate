@@ -115,3 +115,14 @@ class MarketListing(TimestampedModel):
 
     def __str__(self) -> str:
         return f"{self.get_source_display()} - {self.title}"
+
+    @property
+    def image_urls(self) -> list[str]:
+        images = self.raw_payload.get("images", [])
+        if not isinstance(images, list):
+            return []
+        return [image for image in images if isinstance(image, str) and image]
+
+    @property
+    def primary_image_url(self) -> str:
+        return self.image_urls[0] if self.image_urls else ""
