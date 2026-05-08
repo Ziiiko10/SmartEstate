@@ -182,8 +182,11 @@ La couche `apps.intelligence.ml` fournit les algorithmes necessaires a la partie
 - estimation par comparables ponderes (`weighted_comparable_knn`)
 - regression hedonique regularisee (`hedonic_ridge_regression`) entrainee sur les annonces importees
 - baseline par segment marche (`market_segment_baseline`)
-- moteur d'ensemble (`ml_ensemble_v1`) qui combine les modeles selon leur confiance
+- moteur d'ensemble (`ml_ensemble_v1`, version `ensemble_knn_ridge_baseline_v2`) qui combine les modeles selon leur confiance et leur solidite locale
 - nettoyage robuste des valeurs extremes par IQR
+- selection locale des donnees d'entrainement autour du bien cible
+- regression en log-prix/m² avec regularisation et ponderation par similarite / recence
+- baseline de segment avec shrinkage vers un niveau de marche plus large pour limiter le bruit
 - estimation prix/m² ou loyer/m²
 - score d'opportunite investissement
 - simulation de scenario financier avec cashflow, valeur de sortie et IRR

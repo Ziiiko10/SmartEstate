@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
-from math import pow
+from math import expm1, log1p, pow
 from statistics import fmean
 from typing import Iterable
+
+from django.utils import timezone
 
 
 MONEY = Decimal("0.01")
@@ -37,6 +39,7 @@ class TrainingRow:
     bedrooms: Decimal
     bathrooms: Decimal
     price_per_sqm: Decimal
+    last_seen_at: object | None = None
 
 
 def to_decimal(value, default: Decimal | None = None) -> Decimal | None:
@@ -144,6 +147,64 @@ def listing_images(listing) -> list[str]:
     return [image for image in raw_images if isinstance(image, str) and image]
 
 
+def text_similarity(left: str, right: str) -> Decimal:
+    normalized_left = normalize(left)
+    normalized_right = normalize(right)
+    if not normalized_left or not normalized_right:
+        return Decimal("0")
+    if normalized_left == normalized_right:
+        return Decimal("1")
+    if normalized_left in normalized_right or normalized_right in normalized_left:
+        return Decimal("0.82")
+
+    left_tokens = {token for token in normalized_left.replace("-", " ").split() if token}
+    right_tokens = {token for token in normalized_right.replace("-", " ").split() if token}
+    if not left_tokens or not right_tokens:
+        return Decimal("0")
+
+    overlap = left_tokens & right_tokens
+    if not overlap:
+        return Decimal("0")
+    union = left_tokens | right_tokens
+    return Decimal(str(len(overlap) / len(union)))
+
+
+def listing_recency_score(listing) -> Decimal:
+    last_seen_at = getattr(listing, "last_seen_at", None)
+    if not last_seen_at:
+        return Decimal("0.84")
+
+    try:
+        age_days = Decimal(str(max((timezone.now() - last_seen_at).total_seconds(), 0) / 86400))
+    except Exception:
+        return Decimal("0.84")
+
+    if age_days <= Decimal("7"):
+        return Decimal("1")
+    if age_days <= Decimal("30"):
+        return Decimal("0.95")
+    if age_days <= Decimal("90"):
+        return Decimal("0.88")
+    if age_days <= Decimal("180"):
+        return Decimal("0.80")
+    return Decimal("0.72")
+
+
+def listing_completeness_score(listing) -> Decimal:
+    checkpoints = [
+        getattr(listing, "city", ""),
+        getattr(listing, "district", ""),
+        getattr(listing, "asset_type", ""),
+        getattr(listing, "area_sqm", None),
+        getattr(listing, "bedrooms", None),
+        getattr(listing, "bathrooms", None),
+    ]
+    populated = sum(1 for value in checkpoints if value not in {None, ""})
+    ratio = Decimal(populated) / Decimal(len(checkpoints))
+    image_bonus = Decimal("0.06") if listing_images(listing) else Decimal("0")
+    return bounded(Decimal("0.72") + ratio * Decimal("0.28") + image_bonus, Decimal("0.72"), Decimal("1.00"))
+
+
 def feature_similarity(subject: dict, listing) -> Decimal:
     score = Decimal("0")
     total = Decimal("0")
@@ -156,26 +217,35 @@ def feature_similarity(subject: dict, listing) -> Decimal:
 
     subject_type = normalize(subject.get("asset_type"))
     listing_type = normalize(getattr(listing, "asset_type", ""))
-    add("0.20", Decimal("1") if subject_type and subject_type == listing_type else Decimal("0.25"))
+    if subject_type:
+        add("0.22", Decimal("1") if subject_type == listing_type else Decimal("0.05"))
+    else:
+        add("0.22", Decimal("0.35"))
 
     subject_city = normalize(subject.get("city"))
     listing_city = normalize(getattr(listing, "city", ""))
-    add("0.25", Decimal("1") if subject_city and subject_city == listing_city else Decimal("0"))
+    if subject_city:
+        add("0.25", Decimal("1") if subject_city == listing_city else text_similarity(subject_city, listing_city))
+    else:
+        add("0.25", Decimal("0.30"))
 
     subject_district = normalize(subject.get("district"))
     listing_district = normalize(getattr(listing, "district", ""))
     if subject_district and listing_district:
-        add("0.15", Decimal("1") if subject_district == listing_district else Decimal("0"))
+        add("0.17", text_similarity(subject_district, listing_district))
     else:
-        add("0.15", Decimal("0.35") if subject_city and subject_city == listing_city else Decimal("0"))
+        add("0.17", Decimal("0.30") if subject_city and subject_city == listing_city else Decimal("0.12"))
 
     subject_area = to_decimal(subject.get("area_sqm"))
     listing_area = to_decimal(getattr(listing, "area_sqm", None))
     if subject_area and listing_area and subject_area > 0 and listing_area > 0:
         relative_gap = abs(subject_area - listing_area) / max(subject_area, listing_area)
-        add("0.22", Decimal("1") - bounded(relative_gap, Decimal("0"), Decimal("1")))
+        area_score = Decimal("1") - bounded(relative_gap, Decimal("0"), Decimal("1"))
+        if relative_gap > Decimal("0.60"):
+            area_score *= Decimal("0.60")
+        add("0.20", area_score)
     else:
-        add("0.22", Decimal("0.25"))
+        add("0.20", Decimal("0.25"))
 
     for key, weight in [("bedrooms", "0.10"), ("bathrooms", "0.08")]:
         subject_value = to_decimal(subject.get(key))
@@ -188,7 +258,11 @@ def feature_similarity(subject: dict, listing) -> Decimal:
 
     if total == 0:
         return Decimal("0")
-    return (score / total).quantize(Decimal("0.0001"))
+    base_similarity = score / total
+    recency = listing_recency_score(listing)
+    completeness = listing_completeness_score(listing)
+    adjusted = base_similarity * (Decimal("0.90") + recency * Decimal("0.06") + completeness * Decimal("0.04"))
+    return bounded(adjusted, Decimal("0"), Decimal("1")).quantize(Decimal("0.0001"))
 
 
 def build_comparables(
@@ -213,28 +287,48 @@ def build_comparables(
         if price_per_sqm < Decimal("100") or price_per_sqm > Decimal("250000"):
             continue
 
-        similarity = feature_similarity(subject, listing)
-        if similarity < min_similarity:
+        subject_area = to_decimal(subject.get("area_sqm"))
+        if subject_area and subject_area > 0:
+            relative_area_gap = abs(subject_area - area) / max(subject_area, area)
+            if relative_area_gap > Decimal("0.75"):
+                continue
+
+        subject_type = normalize(subject.get("asset_type"))
+        listing_type = normalize(getattr(listing, "asset_type", ""))
+        if subject_type and listing_type and subject_type != listing_type:
             continue
 
-        images = listing_images(listing)
-        comparables.append(
-            Comparable(
-                id=getattr(listing, "id", None),
-                title=getattr(listing, "title", ""),
-                source=getattr(listing, "source", ""),
-                asset_type=getattr(listing, "asset_type", ""),
-                external_url=getattr(listing, "external_url", ""),
-                image_urls=images,
-                primary_image_url=images[0] if images else "",
-                city=getattr(listing, "city", ""),
-                district=getattr(listing, "district", ""),
-                price=quantize_money(price),
-                area_sqm=area.quantize(MONEY),
-                price_per_sqm=quantize_money(price_per_sqm),
-                similarity_score=similarity,
+        for key, max_gap in [("bedrooms", Decimal("4")), ("bathrooms", Decimal("3"))]:
+            subject_value = to_decimal(subject.get(key))
+            listing_value = to_decimal(getattr(listing, key, None))
+            if subject_value is None or listing_value is None:
+                continue
+            if abs(subject_value - listing_value) > max_gap:
+                break
+        else:
+            similarity = feature_similarity(subject, listing)
+            if similarity < min_similarity:
+                continue
+
+            images = listing_images(listing)
+            comparables.append(
+                Comparable(
+                    id=getattr(listing, "id", None),
+                    title=getattr(listing, "title", ""),
+                    source=getattr(listing, "source", ""),
+                    asset_type=getattr(listing, "asset_type", ""),
+                    external_url=getattr(listing, "external_url", ""),
+                    image_urls=images,
+                    primary_image_url=images[0] if images else "",
+                    city=getattr(listing, "city", ""),
+                    district=getattr(listing, "district", ""),
+                    price=quantize_money(price),
+                    area_sqm=area.quantize(MONEY),
+                    price_per_sqm=quantize_money(price_per_sqm),
+                    similarity_score=similarity,
+                )
             )
-        )
+            continue
 
     comparables.sort(key=lambda item: item.similarity_score, reverse=True)
     return comparables[:max_comparables]
@@ -269,6 +363,7 @@ def collect_training_rows(
                 bedrooms=to_decimal(getattr(listing, "bedrooms", None), Decimal("0")) or Decimal("0"),
                 bathrooms=to_decimal(getattr(listing, "bathrooms", None), Decimal("0")) or Decimal("0"),
                 price_per_sqm=price_per_sqm,
+                last_seen_at=getattr(listing, "last_seen_at", None),
             )
         )
 
@@ -278,6 +373,49 @@ def collect_training_rows(
     prices = remove_iqr_outliers([row.price_per_sqm for row in rows])
     robust_prices = set(prices)
     return [row for row in rows if row.price_per_sqm in robust_prices]
+
+
+def select_training_rows_for_subject(
+    subject: dict,
+    rows: list[TrainingRow],
+    *,
+    max_rows: int = 220,
+    min_rows: int = 12,
+) -> list[TrainingRow]:
+    if not rows:
+        return []
+
+    scored_rows = [
+        (feature_similarity(subject, row), row)
+        for row in rows
+    ]
+    scored_rows = [(score, row) for score, row in scored_rows if score >= Decimal("0.18")]
+    if not scored_rows:
+        return rows[:max_rows]
+
+    scored_rows.sort(
+        key=lambda item: (
+            item[0],
+            listing_recency_score(item[1]),
+            item[1].price_per_sqm,
+        ),
+        reverse=True,
+    )
+
+    for threshold in [
+        Decimal("0.88"),
+        Decimal("0.78"),
+        Decimal("0.68"),
+        Decimal("0.58"),
+        Decimal("0.48"),
+        Decimal("0.35"),
+        Decimal("0.25"),
+    ]:
+        candidates = [row for score, row in scored_rows if score >= threshold]
+        if len(candidates) >= min_rows:
+            return candidates[:max_rows]
+
+    return [row for _, row in scored_rows[:max_rows]]
 
 
 def category_counts(rows: list[TrainingRow], key: str) -> dict[str, int]:
@@ -344,12 +482,16 @@ def build_regression_vector(
     area = float(area_sqm or Decimal("0"))
     bed_count = float(bedrooms or Decimal("0"))
     bath_count = float(bathrooms or Decimal("0"))
+    safe_area = max(area, 1.0)
     vector = [
         1.0,
         min(area, 1000.0) / 100.0,
+        log1p(min(area, 2000.0)),
         min(area * area, 1_000_000.0) / 10000.0,
         min(bed_count, 10.0) / 5.0,
         min(bath_count, 10.0) / 5.0,
+        min((bed_count / safe_area) * 100.0, 12.0) / 12.0,
+        min((bath_count / safe_area) * 100.0, 8.0) / 8.0,
     ]
     vector.extend(1.0 if asset_type == value else 0.0 for value in asset_categories)
     vector.extend(1.0 if city == value else 0.0 for value in city_categories)
@@ -357,18 +499,25 @@ def build_regression_vector(
     return vector
 
 
-def ridge_coefficients(features: list[list[float]], targets: list[float], alpha: float = 0.35) -> list[float] | None:
+def ridge_coefficients(
+    features: list[list[float]],
+    targets: list[float],
+    *,
+    alpha: float = 0.55,
+    sample_weights: list[float] | None = None,
+) -> list[float] | None:
     if not features or not targets:
         return None
     width = len(features[0])
     xtx = [[0.0 for _ in range(width)] for _ in range(width)]
     xty = [0.0 for _ in range(width)]
 
-    for row, target in zip(features, targets, strict=False):
+    for index, (row, target) in enumerate(zip(features, targets, strict=False)):
+        weight = sample_weights[index] if sample_weights else 1.0
         for left in range(width):
-            xty[left] += row[left] * target
+            xty[left] += row[left] * target * weight
             for right in range(width):
-                xtx[left][right] += row[left] * row[right]
+                xtx[left][right] += row[left] * row[right] * weight
 
     for index in range(1, width):
         xtx[index][index] += alpha
@@ -405,9 +554,13 @@ def estimate_with_hedonic_regression(
             "sample_size": len(rows),
         }
 
-    asset_categories = top_categories(rows, "asset_type", 8)
-    city_categories = top_categories(rows, "city", 10)
-    district_categories = top_categories(rows, "district", 10)
+    selected_rows = select_training_rows_for_subject(subject, rows, min_rows=min_training_rows)
+    if len(selected_rows) < min_training_rows:
+        selected_rows = rows[: min(len(rows), 160)]
+
+    asset_categories = top_categories(selected_rows, "asset_type", 8)
+    city_categories = top_categories(selected_rows, "city", 10)
+    district_categories = top_categories(selected_rows, "district", 12)
 
     features = [
         build_regression_vector(
@@ -421,10 +574,22 @@ def estimate_with_hedonic_regression(
             city_categories=city_categories,
             district_categories=district_categories,
         )
-        for row in rows
+        for row in selected_rows
     ]
-    targets = [float(row.price_per_sqm) for row in rows]
-    coefficients = ridge_coefficients(features, targets)
+    targets = [log1p(float(row.price_per_sqm)) for row in selected_rows]
+    sample_weights = [
+        float(
+            bounded(
+                feature_similarity(subject, row) * Decimal("0.78")
+                + listing_recency_score(row) * Decimal("0.14")
+                + listing_completeness_score(row) * Decimal("0.08"),
+                Decimal("0.18"),
+                Decimal("1.00"),
+            )
+        )
+        for row in selected_rows
+    ]
+    coefficients = ridge_coefficients(features, targets, sample_weights=sample_weights)
     if coefficients is None:
         return {
             "method": "hedonic_ridge_regression",
@@ -433,7 +598,7 @@ def estimate_with_hedonic_regression(
             "estimated_value": None,
             "estimated_price_per_sqm": None,
             "confidence_score": Decimal("0.00"),
-            "sample_size": len(rows),
+            "sample_size": len(selected_rows),
         }
 
     subject_vector = build_regression_vector(
@@ -447,29 +612,37 @@ def estimate_with_hedonic_regression(
         city_categories=city_categories,
         district_categories=district_categories,
     )
-    prediction = Decimal(str(matrix_vector_product([subject_vector], coefficients)[0]))
+    prediction_log = matrix_vector_product([subject_vector], coefficients)[0]
+    prediction = Decimal(str(expm1(prediction_log)))
 
-    prices = [row.price_per_sqm for row in rows]
+    prices = [row.price_per_sqm for row in selected_rows]
     p10 = percentile(prices, Decimal("10")) or min(prices)
     p90 = percentile(prices, Decimal("90")) or max(prices)
     prediction = bounded(prediction, p10, p90)
 
     residuals = [
-        abs(Decimal(str(predicted)) - row.price_per_sqm)
-        for predicted, row in zip(matrix_vector_product(features, coefficients), rows, strict=False)
+        abs(Decimal(str(expm1(predicted))) - row.price_per_sqm) / max(row.price_per_sqm, Decimal("1"))
+        for predicted, row in zip(matrix_vector_product(features, coefficients), selected_rows, strict=False)
     ]
-    median_price = median(prices) or Decimal("1")
-    median_residual = median(residuals) or Decimal("0")
-    error_ratio = bounded(median_residual / median_price, Decimal("0"), Decimal("1"))
-    sample_factor = bounded(Decimal(len(rows)) / Decimal("60"), Decimal("0"), Decimal("1"))
-    coverage_factor = Decimal("0.70")
+    median_residual_ratio = median(residuals) or Decimal("0")
+    error_ratio = bounded(median_residual_ratio, Decimal("0"), Decimal("1"))
+    sample_factor = bounded(Decimal(len(selected_rows)) / Decimal("60"), Decimal("0"), Decimal("1"))
+    local_rows = sum(1 for row in selected_rows if feature_similarity(subject, row) >= Decimal("0.70"))
+    local_factor = bounded(Decimal(local_rows) / Decimal("18"), Decimal("0"), Decimal("1"))
+    coverage_factor = Decimal("0.68")
     subject_city = normalize(subject.get("city"))
     subject_district = normalize(subject.get("district"))
     if subject_city and subject_city in city_categories:
         coverage_factor += Decimal("0.15")
     if subject_district and subject_district in district_categories:
         coverage_factor += Decimal("0.15")
-    confidence = Decimal("35") + sample_factor * Decimal("25") + coverage_factor * Decimal("25") - error_ratio * Decimal("30")
+    confidence = (
+        Decimal("38")
+        + sample_factor * Decimal("18")
+        + local_factor * Decimal("18")
+        + coverage_factor * Decimal("18")
+        - error_ratio * Decimal("36")
+    )
 
     estimated_value = prediction * subject_area
     interval = bounded(error_ratio + Decimal("0.08"), Decimal("0.08"), Decimal("0.30"))
@@ -482,7 +655,9 @@ def estimate_with_hedonic_regression(
         "high_estimate": quantize_money(estimated_value * (Decimal("1") + interval)),
         "estimated_price_per_sqm": quantize_money(prediction),
         "confidence_score": quantize_percent(bounded(confidence, Decimal("0"), Decimal("90"))),
-        "sample_size": len(rows),
+        "sample_size": len(selected_rows),
+        "local_training_rows": local_rows,
+        "validation_error_ratio": quantize_percent(error_ratio * Decimal("100")),
     }
 
 
@@ -523,14 +698,17 @@ def estimate_with_market_baseline(
         }
 
     levels = ["district_type", "city_type", "city", "asset_type", "all"]
+    level_matches: dict[str, list[TrainingRow]] = {}
     selected_rows: list[TrainingRow] = []
     selected_level = "all"
     for level in levels:
         matches = [row for row in rows if row_matches_subject(row, subject, level=level)]
-        if len(matches) >= min_segment_rows or (level == "all" and matches):
+        if level != "all":
+            matches = select_training_rows_for_subject(subject, matches, max_rows=120, min_rows=min_segment_rows)
+        level_matches[level] = matches
+        if not selected_rows and (len(matches) >= min_segment_rows or (level == "all" and matches)):
             selected_rows = matches
             selected_level = level
-            break
 
     if not selected_rows:
         return {
@@ -544,9 +722,24 @@ def estimate_with_market_baseline(
         }
 
     prices = [row.price_per_sqm for row in selected_rows]
-    estimate = median(prices) or Decimal("0")
-    low = percentile(prices, Decimal("25")) or estimate
-    high = percentile(prices, Decimal("75")) or estimate
+    segment_median = median(prices) or Decimal("0")
+    low = percentile(prices, Decimal("25")) or segment_median
+    high = percentile(prices, Decimal("75")) or segment_median
+
+    fallback_level = "all"
+    for level in levels[levels.index(selected_level) + 1 :]:
+        if level_matches.get(level):
+            fallback_level = level
+            break
+    fallback_prices = [row.price_per_sqm for row in level_matches.get(fallback_level, [])]
+    fallback_median = median(fallback_prices) or segment_median
+
+    segment_weight = bounded(
+        Decimal(len(selected_rows)) / Decimal("12"),
+        Decimal("0.45"),
+        Decimal("0.88"),
+    )
+    estimate = (segment_median * segment_weight) + (fallback_median * (Decimal("1") - segment_weight))
     level_bonus = {
         "district_type": Decimal("30"),
         "city_type": Decimal("24"),
@@ -555,12 +748,14 @@ def estimate_with_market_baseline(
         "all": Decimal("6"),
     }[selected_level]
     sample_factor = bounded(Decimal(len(selected_rows)) / Decimal("25"), Decimal("0"), Decimal("1"))
-    confidence = Decimal("30") + level_bonus + sample_factor * Decimal("25")
+    stability_bonus = bounded(Decimal("1") - abs(segment_median - fallback_median) / max(segment_median, Decimal("1")), Decimal("0"), Decimal("1"))
+    confidence = Decimal("30") + level_bonus + sample_factor * Decimal("18") + stability_bonus * Decimal("12")
 
     return {
         "method": "market_segment_baseline",
         "status": "ok" if len(selected_rows) >= min_segment_rows else "low_sample",
         "segment": selected_level,
+        "fallback_segment": fallback_level,
         "estimated_value": quantize_money(estimate * subject_area),
         "low_estimate": quantize_money(min(low, estimate) * subject_area),
         "high_estimate": quantize_money(max(high, estimate) * subject_area),
@@ -642,7 +837,13 @@ def estimate_from_comparables(
     prices_per_sqm = [item.price_per_sqm for item in comparables]
     robust_values = set(remove_iqr_outliers(prices_per_sqm))
     weighted_values = [
-        (item.price_per_sqm, item.similarity_score * item.similarity_score)
+        (
+            item.price_per_sqm,
+            item.similarity_score
+            * item.similarity_score
+            * (Decimal("0.75") + text_similarity(subject.get("district", ""), item.district) * Decimal("0.15"))
+            * (Decimal("0.85") + text_similarity(subject.get("city", ""), item.city) * Decimal("0.15")),
+        )
         for item in comparables
         if item.price_per_sqm in robust_values
     ]
@@ -656,8 +857,15 @@ def estimate_from_comparables(
     high_estimate = max(high_price_per_sqm, estimated_price_per_sqm) * subject_area
 
     avg_similarity = sum(item.similarity_score for item in comparables) / Decimal(len(comparables))
+    exact_match_count = sum(
+        1
+        for item in comparables
+        if normalize(item.city) == normalize(subject.get("city"))
+        and text_similarity(item.district, subject.get("district", "")) >= Decimal("0.82")
+    )
     sample_factor = bounded(Decimal(len(comparables)) / Decimal(max(min_comparables, 1) * 2), Decimal("0"), Decimal("1"))
-    confidence = Decimal("25") + avg_similarity * Decimal("45") + sample_factor * Decimal("30")
+    locality_factor = bounded(Decimal(exact_match_count) / Decimal("4"), Decimal("0"), Decimal("1"))
+    confidence = Decimal("26") + avg_similarity * Decimal("42") + sample_factor * Decimal("22") + locality_factor * Decimal("10")
     if len(comparables) < min_comparables:
         confidence *= Decimal("0.65")
 
@@ -671,8 +879,52 @@ def estimate_from_comparables(
         "estimated_price_per_sqm": quantize_money(estimated_price_per_sqm),
         "confidence_score": quantize_percent(bounded(confidence, Decimal("0"), Decimal("95"))),
         "sample_size": len(comparables),
+        "avg_similarity": avg_similarity.quantize(Decimal("0.0001")),
+        "exact_match_count": exact_match_count,
         "comparables": [comparable.__dict__ for comparable in comparables],
     }
+
+
+def ensemble_model_weight(result: dict) -> Decimal:
+    method = result.get("method", "")
+    confidence = to_decimal(result.get("confidence_score"), Decimal("0")) or Decimal("0")
+    confidence_factor = bounded(confidence / Decimal("100"), Decimal("0.12"), Decimal("1.00"))
+
+    if method == "weighted_comparable_knn":
+        base = Decimal("0.42")
+        similarity = to_decimal(result.get("avg_similarity"), Decimal("0.50")) or Decimal("0.50")
+        exact_match_count = Decimal(str(result.get("exact_match_count", 0)))
+        locality_factor = bounded(exact_match_count / Decimal("4"), Decimal("0"), Decimal("1"))
+        sample_factor = bounded(Decimal(result.get("sample_size", 0)) / Decimal("8"), Decimal("0"), Decimal("1"))
+        strength = Decimal("0.45") + similarity * Decimal("0.35") + locality_factor * Decimal("0.12") + sample_factor * Decimal("0.08")
+        return base * confidence_factor * bounded(strength, Decimal("0.25"), Decimal("1.00"))
+
+    if method == "hedonic_ridge_regression":
+        base = Decimal("0.36")
+        local_rows = Decimal(str(result.get("local_training_rows", 0)))
+        sample_size = Decimal(str(result.get("sample_size", 0)))
+        validation_error = to_decimal(result.get("validation_error_ratio"), Decimal("18")) or Decimal("18")
+        local_factor = bounded(local_rows / Decimal("20"), Decimal("0"), Decimal("1"))
+        sample_factor = bounded(sample_size / Decimal("80"), Decimal("0"), Decimal("1"))
+        stability = Decimal("1") - bounded(validation_error / Decimal("45"), Decimal("0"), Decimal("0.70"))
+        strength = Decimal("0.40") + local_factor * Decimal("0.30") + sample_factor * Decimal("0.18") + stability * Decimal("0.12")
+        return base * confidence_factor * bounded(strength, Decimal("0.20"), Decimal("1.00"))
+
+    if method == "market_segment_baseline":
+        base = Decimal("0.22")
+        segment = result.get("segment", "all")
+        segment_bonus = {
+            "district_type": Decimal("1.00"),
+            "city_type": Decimal("0.88"),
+            "city": Decimal("0.76"),
+            "asset_type": Decimal("0.62"),
+            "all": Decimal("0.50"),
+        }.get(segment, Decimal("0.50"))
+        sample_factor = bounded(Decimal(result.get("sample_size", 0)) / Decimal("18"), Decimal("0"), Decimal("1"))
+        strength = Decimal("0.40") + segment_bonus * Decimal("0.40") + sample_factor * Decimal("0.20")
+        return base * confidence_factor * bounded(strength, Decimal("0.18"), Decimal("0.92"))
+
+    return Decimal("0.10") * confidence_factor
 
 
 def estimate_with_ml_models(
@@ -700,7 +952,7 @@ def estimate_with_ml_models(
     if not valid_models:
         return {
             "method": "ml_ensemble_v1",
-            "model_version": "ensemble_knn_ridge_baseline_v1",
+            "model_version": "ensemble_knn_ridge_baseline_v2",
             "status": "no_comparables",
             "message": "No trained ML estimate could be produced from current market data.",
             "transaction_type": transaction_type,
@@ -715,25 +967,20 @@ def estimate_with_ml_models(
             "comparables": comparable_estimate.get("comparables", []),
         }
 
-    base_weights = {
-        "weighted_comparable_knn": Decimal("0.45"),
-        "hedonic_ridge_regression": Decimal("0.35"),
-        "market_segment_baseline": Decimal("0.20"),
-    }
     weighted_values = []
     weighted_low = []
     weighted_high = []
     weighted_price_per_sqm = []
+    model_weights = []
     for result in valid_models:
-        confidence = to_decimal(result.get("confidence_score"), Decimal("35")) or Decimal("35")
-        method_weight = base_weights.get(result.get("method"), Decimal("0.15"))
-        weight = method_weight * bounded(confidence / Decimal("100"), Decimal("0.15"), Decimal("1"))
+        weight = ensemble_model_weight(result)
         estimated_value = to_decimal(result.get("estimated_value"))
         low_estimate = to_decimal(result.get("low_estimate"), estimated_value)
         high_estimate = to_decimal(result.get("high_estimate"), estimated_value)
         price_per_sqm = to_decimal(result.get("estimated_price_per_sqm"))
         if estimated_value is not None:
             weighted_values.append((estimated_value, weight))
+            model_weights.append(weight)
         if low_estimate is not None:
             weighted_low.append((low_estimate, weight))
         if high_estimate is not None:
@@ -758,12 +1005,13 @@ def estimate_with_ml_models(
         to_decimal(result.get("confidence_score"), Decimal("0")) or Decimal("0")
         for result in valid_models
     ]
-    confidence = (sum(model_confidences) / Decimal(len(model_confidences))) + Decimal(len(valid_models) * 4)
+    weight_strength = bounded(sum(model_weights) / Decimal("0.80"), Decimal("0"), Decimal("1")) if model_weights else Decimal("0")
+    confidence = (sum(model_confidences) / Decimal(len(model_confidences))) + Decimal(len(valid_models) * 4) + weight_strength * Decimal("8")
     confidence -= disagreement_penalty
 
     return {
         "method": "ml_ensemble_v1",
-        "model_version": "ensemble_knn_ridge_baseline_v1",
+        "model_version": "ensemble_knn_ridge_baseline_v2",
         "status": "ok" if comparable_estimate.get("status") == "ok" or len(valid_models) >= 2 else "low_sample",
         "transaction_type": transaction_type,
         "estimated_value": quantize_money(estimated_value),
