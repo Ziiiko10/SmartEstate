@@ -1,5 +1,4 @@
 import { Link, useLocation } from "react-router-dom";
-import { useAuth } from "../auth/AuthContext";
 
 const navItems = [
   {
@@ -54,7 +53,6 @@ const navItems = [
 
 export default function DashboardSidebar() {
   const location = useLocation();
-  const { logout, user } = useAuth();
 
   function isActive(paths: string[]) {
     return paths.some((path) => location.pathname === path || location.pathname.startsWith(`${path}/`));
@@ -105,26 +103,6 @@ export default function DashboardSidebar() {
             <span className="material-symbols-outlined text-sm">add</span>
             Nouvelle Analyse
           </Link>
-        </div>
-
-        <div className="mt-auto border-t border-outline-variant/15 p-6">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-primary text-white flex items-center justify-center font-headline font-bold">
-              {(user?.full_name || "SD").slice(0, 1).toUpperCase()}
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-xs font-bold text-primary truncate">{user?.full_name || "SmartEstate Demo"}</p>
-              <p className="text-[10px] text-on-surface-variant truncate">Mode données live</p>
-            </div>
-            <button
-              aria-label="Déconnexion"
-              className="p-2 rounded-full text-on-surface-variant hover:bg-surface-container-low hover:text-secondary transition-colors"
-              onClick={logout}
-              type="button"
-            >
-              <span className="material-symbols-outlined text-xl">logout</span>
-            </button>
-          </div>
         </div>
       </aside>
 

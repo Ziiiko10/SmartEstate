@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import ImportedPageDocument from "../components/ImportedPageDocument";
 import { DashboardPageLoader } from "../components/LoadingState";
 import { useAuth } from "../auth/AuthContext";
@@ -161,17 +162,21 @@ function typeLabel(type: string) {
 }
 
 export default function ExecutiveDashboardPage() {
-  const { token } = useAuth();
+  const navigate = useNavigate();
+  const { logout, token } = useAuth();
   const [dashboard, setDashboard] = useState<DashboardOverview>(emptyDashboard);
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(true);
 
-  const loadDashboard = useCallback(async () => {
+  const loadDashboard = useCallback(async (forceRefresh = false) => {
     setIsLoading(true);
     setError("");
 
     try {
-      const payload = await apiRequest<DashboardOverview>("/dashboard/overview/", { token });
+      const payload = await apiRequest<DashboardOverview>("/dashboard/overview/", {
+        forceRefresh,
+        token,
+      });
       setDashboard({ ...emptyDashboard, ...payload });
     } catch (requestError) {
       setError(getErrorMessage(requestError, "Impossible de charger le dashboard."));
@@ -183,7 +188,7 @@ export default function ExecutiveDashboardPage() {
   useEffect(() => {
     void loadDashboard();
     const interval = window.setInterval(() => {
-      void loadDashboard();
+      void loadDashboard(true);
     }, 120000);
 
     return () => {
@@ -207,6 +212,11 @@ export default function ExecutiveDashboardPage() {
         }));
   const isInitialLoading = isLoading && dashboard.refreshed_at === "" && !error;
 
+  function handleSignOut() {
+    logout();
+    navigate("/", { replace: true });
+  }
+
   return (
     <ImportedPageDocument
       bodyClassName="bg-background font-body text-on-surface selection:bg-secondary-container"
@@ -221,9 +231,17 @@ export default function ExecutiveDashboardPage() {
           </div>
           <div className="flex items-center gap-4">
             <button
+              className="inline-flex items-center gap-2 rounded-lg border border-outline-variant/20 bg-white px-4 py-2 text-sm font-semibold text-primary transition-colors hover:bg-surface-container-low"
+              onClick={handleSignOut}
+              type="button"
+            >
+              <span className="material-symbols-outlined">logout</span>
+              <span>Déconnecter</span>
+            </button>
+            <button
               className="inline-flex items-center gap-2 rounded-lg bg-surface-container-low px-4 py-2 text-sm font-semibold text-primary transition-colors hover:bg-surface-container disabled:cursor-not-allowed disabled:opacity-60"
               disabled={isLoading}
-              onClick={() => void loadDashboard()}
+              onClick={() => void loadDashboard(true)}
               type="button"
             >
               <span className={isLoading ? "material-symbols-outlined animate-spin" : "material-symbols-outlined"}>

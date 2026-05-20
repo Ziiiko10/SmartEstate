@@ -167,6 +167,8 @@ class MarketListingApiTests(TestCase):
                 district="Maarif",
                 price=Decimal("1000000.00") + Decimal(index * 100000),
                 area_sqm=Decimal("100.00"),
+                bedrooms=3,
+                bathrooms=2,
                 scraped_at=now,
                 last_seen_at=now,
                 raw_payload={"images": [f"https://images.example.com/{index + 1}.jpg"]},
@@ -179,6 +181,8 @@ class MarketListingApiTests(TestCase):
         payload = response.json()
         self.assertIsInstance(payload, list)
         self.assertEqual(len(payload), 2)
+        self.assertNotIn("raw_payload", payload[0])
+        self.assertNotIn("description", payload[0])
 
     def test_market_listings_page_returns_paginated_payload(self):
         response = self.client.get("/api/market-listings/?page=2&page_size=1")
@@ -191,3 +195,86 @@ class MarketListingApiTests(TestCase):
         self.assertEqual(payload["previous_page"], 1)
         self.assertEqual(payload["next_page"], 3)
         self.assertEqual(len(payload["results"]), 1)
+        self.assertNotIn("raw_payload", payload["results"][0])
+        self.assertNotIn("description", payload["results"][0])
+
+    def test_market_listings_api_returns_all_stored_images(self):
+        listing = MarketListing.objects.create(
+            source=MarketListing.Source.MUBAWAB,
+            source_id="images-88",
+            external_url="https://example.com/listing-images-88",
+            title="Annonce avec galerie complète",
+            description="Annonce multi-images",
+            asset_type=MarketListing.AssetType.APARTMENT,
+            transaction_type=MarketListing.TransactionType.SALE,
+            city="Rabat",
+            district="Agdal",
+            price=Decimal("2100000.00"),
+            area_sqm=Decimal("145.00"),
+            scraped_at=timezone.now(),
+            last_seen_at=timezone.now(),
+            raw_payload={
+                "images": [
+                    "https://images.example.com/gallery-1.jpg",
+                    "https://images.example.com/gallery-2.jpg",
+                    "https://images.example.com/gallery-3.jpg",
+                ]
+            },
+        )
+
+        response = self.client.get(f"/api/market-listings/?limit=10&source_id={listing.source_id}")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        created_listing = next(item for item in payload if item["source_id"] == listing.source_id)
+        self.assertEqual(
+            created_listing["image_urls"],
+            [
+                "https://images.example.com/gallery-1.jpg",
+                "https://images.example.com/gallery-2.jpg",
+                "https://images.example.com/gallery-3.jpg",
+            ],
+        )
+        self.assertEqual(created_listing["primary_image_url"], "https://images.example.com/gallery-1.jpg")
+
+    def test_market_listing_filters_endpoint_returns_choice_lists(self):
+        now = timezone.now()
+        MarketListing.objects.create(
+            source=MarketListing.Source.MUBAWAB,
+            source_id="44",
+            external_url="https://example.com/listing-44",
+            title="Villa Souissi",
+            description="Annonce Rabat",
+            asset_type=MarketListing.AssetType.VILLA,
+            transaction_type=MarketListing.TransactionType.RENT,
+            city="Rabat",
+            district="Souissi",
+            price=Decimal("30000.00"),
+            area_sqm=Decimal("320.00"),
+            scraped_at=now,
+            last_seen_at=now,
+            raw_payload={"images": ["https://images.example.com/44.jpg"]},
+        )
+
+        response = self.client.get("/api/market-listings/filters/?source=avito&transaction_type=sale")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["cities"], [{"count": 3, "label": "Casablanca", "value": "Casablanca"}])
+        self.assertEqual(payload["districts"], [{"count": 3, "label": "Maarif", "value": "Maarif"}])
+        self.assertEqual(
+            payload["bedroom_choices"],
+            [{"count": 3, "label": "3 chambres", "value": "3"}],
+        )
+        self.assertEqual(
+            payload["bathroom_choices"],
+            [{"count": 3, "label": "2 salles de bain", "value": "2"}],
+        )
+        self.assertIn(
+            {"count": 3, "label": "Type • Appartement", "value": "asset_type:apartment"},
+            payload["search_choices"],
+        )
+        self.assertIn(
+            {"count": 3, "label": "Quartier • Maarif", "value": "q:Maarif"},
+            payload["search_choices"],
+        )

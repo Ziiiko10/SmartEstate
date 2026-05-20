@@ -6,7 +6,7 @@ import {
   useEffect,
   useState,
 } from "react";
-import { apiRequest } from "../lib/api";
+import { apiRequest, clearApiCache } from "../lib/api";
 
 const LOCAL_STORAGE_TOKEN_KEY = "smartestate.auth.token";
 const SESSION_STORAGE_TOKEN_KEY = "smartestate.auth.session-token";
@@ -122,6 +122,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
         });
       } catch {
         clearStoredToken();
+        clearApiCache();
         if (!isMounted) {
           return;
         }
@@ -154,6 +155,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
     });
 
     storeToken(response.token, payload.remember);
+    clearApiCache();
     startTransition(() => {
       setToken(response.token);
       setUser(response.user);
@@ -175,6 +177,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
     });
 
     storeToken(response.token, true);
+    clearApiCache();
     startTransition(() => {
       setToken(response.token);
       setUser(response.user);
@@ -185,6 +188,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
   function logout() {
     clearStoredToken();
+    clearApiCache();
     startTransition(() => {
       setToken(null);
       setUser(PUBLIC_DEMO_ACCESS ? DEMO_USER : null);

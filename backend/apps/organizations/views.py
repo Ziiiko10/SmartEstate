@@ -10,7 +10,13 @@ class OrganizationViewSet(viewsets.ModelViewSet):
     serializer_class = OrganizationSerializer
 
     def get_queryset(self):
-        return visible_organizations(self.request.user).annotate(member_count=Count("memberships"))
+        return visible_organizations(self.request.user).annotate(member_count=Count("memberships")).only(
+            "id",
+            "name",
+            "city",
+            "country",
+            "description",
+        )
 
 
 class MembershipViewSet(viewsets.ModelViewSet):
@@ -21,4 +27,18 @@ class MembershipViewSet(viewsets.ModelViewSet):
         return Membership.objects.filter(organization__in=organizations).select_related(
             "organization",
             "user",
+        ).only(
+            "id",
+            "organization",
+            "organization__name",
+            "role",
+            "title",
+            "is_primary",
+            "created_at",
+            "updated_at",
+            "user",
+            "user__email",
+            "user__full_name",
+            "user__is_active",
+            "user__role",
         )

@@ -363,7 +363,7 @@ export default function HomePage() {
         </div>
       </div>
       <div className="md:col-span-12 pt-16 border-t border-outline-variant/30 flex flex-col md:flex-row justify-between items-start gap-8">
-        <p className="font-inter text-[10px] font-bold uppercase tracking-widest text-[#454652]">© 2024 SmartEstate Morocco. Tous droits réservés.</p>
+        <p className="font-inter text-[10px] font-bold uppercase tracking-widest text-[#454652]">© 2026 SmartEstate Morocco. Tous droits réservés.</p>
         <p className="text-[10px] text-[#454652]/60 max-w-xl leading-relaxed">
           SmartEstate Morocco est une plateforme technologique. Les investissements immobiliers comportent des risques. Les rendements passés ne garantissent pas les résultats futurs. Agrément AMMC en cours.
         </p>

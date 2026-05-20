@@ -1,7 +1,7 @@
 from decimal import Decimal
 from types import SimpleNamespace
 
-from django.test import SimpleTestCase
+from django.test import SimpleTestCase, TestCase, override_settings
 from django.utils import timezone
 
 from apps.intelligence.ml.algorithms import (
@@ -12,6 +12,9 @@ from apps.intelligence.ml.algorithms import (
     score_investment_opportunity,
     simulate_investment_scenario,
 )
+from apps.intelligence.models import Valuation
+from apps.organizations.models import Organization
+from apps.properties.models import MarketListing
 
 
 class BaselineMLAlgorithmTests(SimpleTestCase):
@@ -180,3 +183,64 @@ class BaselineMLAlgorithmTests(SimpleTestCase):
             bathrooms=1,
             last_seen_at=now,
         )
+
+
+@override_settings(PUBLIC_DEMO_ACCESS=True)
+class MarketValuationApiTests(TestCase):
+    def setUp(self):
+        self.organization = Organization.objects.create(name="SmartEstate Demo Org")
+        now = timezone.now()
+
+        for index in range(18):
+            MarketListing.objects.create(
+                source=MarketListing.Source.MUBAWAB if index % 2 else MarketListing.Source.AVITO,
+                source_id=f"valuation-{index + 1}",
+                external_url=f"https://example.com/valuation-{index + 1}",
+                title=f"Comparable {index + 1}",
+                description="Annonce comparable pour valuation",
+                asset_type=MarketListing.AssetType.APARTMENT,
+                transaction_type=MarketListing.TransactionType.SALE,
+                city="Agadir" if index < 12 else "Casablanca",
+                district="Centre Ville" if index < 12 else "Maarif",
+                price=Decimal("1200000.00") + Decimal(index * 45000),
+                area_sqm=Decimal("82.00") + Decimal(index % 4),
+                bedrooms=2,
+                bathrooms=1,
+                scraped_at=now,
+                last_seen_at=now,
+                raw_payload={
+                    "images": [
+                        f"https://images.example.com/valuation-{index + 1}-1.jpg",
+                        f"https://images.example.com/valuation-{index + 1}-2.jpg",
+                    ]
+                },
+            )
+
+    def test_save_valuation_serializes_models_payload(self):
+        response = self.client.post(
+            "/api/ml/valuation/",
+            data={
+                "area_sqm": "76",
+                "asset_type": "apartment",
+                "bathrooms": 1,
+                "bedrooms": 2,
+                "city": "Agadir",
+                "district": "Centre Ville",
+                "save_valuation": True,
+                "title": "Estimation IA Agadir",
+                "transaction_type": "sale",
+            },
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertIsNotNone(payload["saved_valuation_id"])
+
+        valuation = Valuation.objects.get(id=payload["saved_valuation_id"])
+        self.assertEqual(valuation.organization, self.organization)
+        self.assertEqual(valuation.title, "Estimation IA Agadir")
+        self.assertEqual(valuation.input_payload["features"]["city"], "Agadir")
+        self.assertIsInstance(valuation.input_payload["models"], list)
+        self.assertGreater(len(valuation.input_payload["models"]), 0)
+        self.assertIsInstance(valuation.input_payload["models"][0]["estimated_value"], float)

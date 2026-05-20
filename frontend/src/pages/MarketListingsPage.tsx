@@ -1,9 +1,9 @@
-import { useDeferredValue, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import ImportedPageDocument from "../components/ImportedPageDocument";
 import { CardGridSkeleton, MetricCardsSkeleton, SkeletonBlock } from "../components/LoadingState";
 import { useAuth } from "../auth/AuthContext";
-import { apiRequest, getErrorMessage } from "../lib/api";
+import { apiPrefetch, apiRequest, getErrorMessage } from "../lib/api";
 
 const pageStyles = `.material-symbols-outlined {
             font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
@@ -36,7 +36,79 @@ type PaginatedMarketListings = {
   results: MarketListing[];
 };
 
+type FilterChoice = {
+  count: number;
+  label: string;
+  value: string;
+};
+
+type MarketListingFilters = {
+  cities: FilterChoice[];
+  search_choices: FilterChoice[];
+};
+
 const ITEMS_PER_PAGE = 24;
+
+function applySearchChoice(searchParams: URLSearchParams, searchChoice: string) {
+  if (!searchChoice) {
+    return;
+  }
+
+  const [kind, ...rawValueParts] = searchChoice.split(":");
+  const rawValue = rawValueParts.join(":").trim();
+  if (!rawValue) {
+    return;
+  }
+
+  if (kind === "asset_type") {
+    searchParams.set("asset_type", rawValue);
+    return;
+  }
+
+  if (kind === "q") {
+    searchParams.set("q", rawValue);
+  }
+}
+
+function buildListingsPath(params: {
+  city: string;
+  page: number;
+  searchChoice: string;
+  source: string;
+  transaction: string;
+}) {
+  const searchParams = new URLSearchParams({
+    page: String(params.page),
+    page_size: String(ITEMS_PER_PAGE),
+  });
+
+  if (params.source !== "all") {
+    searchParams.set("source", params.source);
+  }
+  if (params.transaction !== "all") {
+    searchParams.set("transaction_type", params.transaction);
+  }
+  if (params.city) {
+    searchParams.set("city", params.city);
+  }
+  applySearchChoice(searchParams, params.searchChoice);
+
+  return `/market-listings/?${searchParams.toString()}`;
+}
+
+function buildFilterChoicesPath(params: { source: string; transaction: string }) {
+  const searchParams = new URLSearchParams();
+
+  if (params.source !== "all") {
+    searchParams.set("source", params.source);
+  }
+  if (params.transaction !== "all") {
+    searchParams.set("transaction_type", params.transaction);
+  }
+
+  const query = searchParams.toString();
+  return query ? `/market-listings/filters/?${query}` : "/market-listings/filters/";
+}
 
 function formatMoney(value: number | string | null | undefined, compact = false) {
   const amount = Number(value ?? 0);
@@ -101,23 +173,86 @@ function cityGradient(city: string) {
   return palette[city] ?? "from-[#334155] via-[#475569] to-[#94a3b8]";
 }
 
+function getListingImages(listing: MarketListing) {
+  const uniqueImages = new Set<string>();
+  const preferredImages = listing.image_urls.length > 0 ? listing.image_urls : [listing.primary_image_url];
+
+  for (const imageUrl of preferredImages) {
+    const normalizedUrl = imageUrl?.trim();
+    if (!normalizedUrl || uniqueImages.has(normalizedUrl)) {
+      continue;
+    }
+    uniqueImages.add(normalizedUrl);
+  }
+
+  return Array.from(uniqueImages);
+}
+
 export default function MarketListingsPage() {
   const { token } = useAuth();
   const [marketListings, setMarketListings] = useState<MarketListing[]>([]);
+  const [filterChoices, setFilterChoices] = useState<MarketListingFilters>({
+    cities: [],
+    search_choices: [],
+  });
   const [totalCount, setTotalCount] = useState(0);
-  const [query, setQuery] = useState("");
-  const [cityQuery, setCityQuery] = useState("");
+  const [selectedSearch, setSelectedSearch] = useState("");
+  const [selectedCity, setSelectedCity] = useState("");
   const [selectedSource, setSelectedSource] = useState("all");
   const [selectedTransaction, setSelectedTransaction] = useState("all");
   const [page, setPage] = useState(1);
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(true);
-  const deferredQuery = useDeferredValue(query.trim());
-  const deferredCity = useDeferredValue(cityQuery.trim());
 
   useEffect(() => {
     setPage(1);
-  }, [deferredCity, deferredQuery, selectedSource, selectedTransaction]);
+  }, [selectedCity, selectedSearch, selectedSource, selectedTransaction]);
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadFilterChoices() {
+      try {
+        const payload = await apiRequest<MarketListingFilters>(
+          buildFilterChoicesPath({
+            source: selectedSource,
+            transaction: selectedTransaction,
+          }),
+          { token },
+        );
+
+        if (!active) {
+          return;
+        }
+
+        setFilterChoices(payload);
+
+        if (selectedCity && !payload.cities.some((choice) => choice.value === selectedCity)) {
+          setSelectedCity("");
+        }
+        if (
+          selectedSearch &&
+          !payload.search_choices.some((choice) => choice.value === selectedSearch)
+        ) {
+          setSelectedSearch("");
+        }
+      } catch {
+        if (!active) {
+          return;
+        }
+
+        setFilterChoices({
+          cities: [],
+          search_choices: [],
+        });
+      }
+    }
+
+    void loadFilterChoices();
+    return () => {
+      active = false;
+    };
+  }, [selectedCity, selectedSearch, selectedSource, selectedTransaction, token]);
 
   useEffect(() => {
     let active = true;
@@ -127,25 +262,15 @@ export default function MarketListingsPage() {
       setError("");
 
       try {
-        const params = new URLSearchParams({
-          page: String(page),
-          page_size: String(ITEMS_PER_PAGE),
+        const path = buildListingsPath({
+          city: selectedCity,
+          page,
+          searchChoice: selectedSearch,
+          source: selectedSource,
+          transaction: selectedTransaction,
         });
 
-        if (selectedSource !== "all") {
-          params.set("source", selectedSource);
-        }
-        if (selectedTransaction !== "all") {
-          params.set("transaction_type", selectedTransaction);
-        }
-        if (deferredQuery) {
-          params.set("q", deferredQuery);
-        }
-        if (deferredCity) {
-          params.set("city", deferredCity);
-        }
-
-        const payload = await apiRequest<PaginatedMarketListings>(`/market-listings/?${params.toString()}`, {
+        const payload = await apiRequest<PaginatedMarketListings>(path, {
           token,
         });
 
@@ -155,6 +280,32 @@ export default function MarketListingsPage() {
 
         setMarketListings(payload.results);
         setTotalCount(payload.count);
+
+        if (payload.next_page) {
+          void apiPrefetch<PaginatedMarketListings>(
+            buildListingsPath({
+              city: selectedCity,
+              page: payload.next_page,
+              searchChoice: selectedSearch,
+              source: selectedSource,
+              transaction: selectedTransaction,
+            }),
+            { token },
+          );
+        }
+
+        if (payload.previous_page) {
+          void apiPrefetch<PaginatedMarketListings>(
+            buildListingsPath({
+              city: selectedCity,
+              page: payload.previous_page,
+              searchChoice: selectedSearch,
+              source: selectedSource,
+              transaction: selectedTransaction,
+            }),
+            { token },
+          );
+        }
       } catch (requestError) {
         if (!active) {
           return;
@@ -171,7 +322,7 @@ export default function MarketListingsPage() {
     return () => {
       active = false;
     };
-  }, [deferredCity, deferredQuery, page, selectedSource, selectedTransaction, token]);
+  }, [page, selectedCity, selectedSearch, selectedSource, selectedTransaction, token]);
 
   const totalPages = Math.max(1, Math.ceil(totalCount / ITEMS_PER_PAGE));
   const currentPage = Math.min(page, totalPages);
@@ -243,31 +394,36 @@ export default function MarketListingsPage() {
                 <span className="mb-2 block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">
                   Recherche
                 </span>
-                <div className="relative">
-                  <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-base">
-                    search
-                  </span>
-                  <input
-                    className="w-full rounded-lg border-none bg-surface-container-low py-3 pl-10 pr-4 text-sm focus:ring-2 focus:ring-secondary/20"
-                    onChange={(event) => setQuery(event.target.value)}
-                    placeholder="Titre, quartier, source..."
-                    type="text"
-                    value={query}
-                  />
-                </div>
+                <select
+                  className="w-full rounded-lg border-none bg-surface-container-low py-3 px-4 text-sm focus:ring-2 focus:ring-secondary/20"
+                  onChange={(event) => setSelectedSearch(event.target.value)}
+                  value={selectedSearch}
+                >
+                  <option value="">Toutes</option>
+                  {filterChoices.search_choices.map((choice) => (
+                    <option key={choice.value} value={choice.value}>
+                      {choice.label} ({choice.count})
+                    </option>
+                  ))}
+                </select>
               </label>
 
               <label className="block">
                 <span className="mb-2 block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">
                   Ville
                 </span>
-                <input
-                  className="w-full rounded-lg border-none bg-surface-container-low px-4 py-3 text-sm focus:ring-2 focus:ring-secondary/20"
-                  onChange={(event) => setCityQuery(event.target.value)}
-                  placeholder="Casablanca, Marrakech..."
-                  type="text"
-                  value={cityQuery}
-                />
+                <select
+                  className="w-full rounded-lg border-none bg-surface-container-low py-3 px-4 text-sm focus:ring-2 focus:ring-secondary/20"
+                  onChange={(event) => setSelectedCity(event.target.value)}
+                  value={selectedCity}
+                >
+                  <option value="">Toutes</option>
+                  {filterChoices.cities.map((choice) => (
+                    <option key={choice.value} value={choice.value}>
+                      {choice.label} ({choice.count})
+                    </option>
+                  ))}
+                </select>
               </label>
 
               <label className="block">
@@ -318,68 +474,77 @@ export default function MarketListingsPage() {
         ) : (
           <>
             <section className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-6">
-              {marketListings.map((listing) => (
-                <article className="rounded-2xl border border-slate-200/60 bg-white overflow-hidden shadow-sm" key={listing.id}>
-                  <div className="aspect-[16/10] bg-surface-container-low overflow-hidden">
-                    {listing.primary_image_url ? (
-                      <img
-                        alt={listing.title}
-                        className="h-full w-full object-cover transition-transform duration-500 hover:scale-105"
-                        src={listing.primary_image_url}
-                      />
-                    ) : (
-                      <div className={`h-full w-full bg-gradient-to-br ${cityGradient(listing.city)} p-6 text-white flex flex-col justify-between`}>
-                        <span className="text-[10px] uppercase tracking-[0.22em] font-bold opacity-80">{listing.source}</span>
+              {marketListings.map((listing) => {
+                const images = getListingImages(listing);
+                const mainImage = images[0] ?? "";
+
+                return (
+                  <article className="rounded-2xl border border-slate-200/60 bg-white overflow-hidden shadow-sm" key={listing.id}>
+                    <div className="relative aspect-[16/10] bg-surface-container-low overflow-hidden">
+                      {mainImage ? (
+                        <img
+                          alt={listing.title}
+                          className="h-full w-full object-cover transition-transform duration-500 hover:scale-105"
+                          loading="lazy"
+                          src={mainImage}
+                        />
+                      ) : (
+                        <div className={`h-full w-full bg-gradient-to-br ${cityGradient(listing.city)} p-6 text-white flex flex-col justify-between`}>
+                          <span className="text-[10px] uppercase tracking-[0.22em] font-bold opacity-80">{listing.source}</span>
+                          <div>
+                            <p className="text-2xl font-headline font-extrabold">{listing.city || "Maroc"}</p>
+                            <p className="text-sm opacity-80">{listing.district || assetTypeLabel(listing.asset_type)}</p>
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="pointer-events-none absolute inset-x-0 top-0 p-4">
+                        <span className="rounded-full bg-black/45 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.22em] text-white backdrop-blur-sm">
+                          {listing.source}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="p-6">
+                      <div className="mb-4 flex items-start justify-between gap-4">
                         <div>
-                          <p className="text-2xl font-headline font-extrabold">{listing.city || "Maroc"}</p>
-                          <p className="text-sm opacity-80">{listing.district || assetTypeLabel(listing.asset_type)}</p>
+                          <div className="mb-2 flex flex-wrap gap-2">
+                            <span className="rounded-full bg-surface-container-low px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">
+                              {transactionLabel(listing.transaction_type)}
+                            </span>
+                          </div>
+                          <h2 className="text-lg font-headline font-bold text-primary line-clamp-2">{listing.title}</h2>
                         </div>
+                        <span className="rounded-full bg-surface-container-low px-3 py-1 text-[10px] font-bold text-on-surface-variant whitespace-nowrap">
+                          {relativeDate(listing.last_seen_at)}
+                        </span>
                       </div>
-                    )}
-                  </div>
-                  <div className="p-6">
-                    <div className="mb-4 flex items-start justify-between gap-4">
-                      <div>
-                        <div className="mb-2 flex flex-wrap gap-2">
-                          <span className="rounded-full bg-secondary-container px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-secondary">
-                            {listing.source}
-                          </span>
-                          <span className="rounded-full bg-surface-container-low px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">
-                            {transactionLabel(listing.transaction_type)}
-                          </span>
-                        </div>
-                        <h2 className="text-lg font-headline font-bold text-primary line-clamp-2">{listing.title}</h2>
+
+                      <div className="space-y-2 text-sm text-on-surface-variant">
+                        <p>{listing.district ? `${listing.district}, ${listing.city}` : listing.city || "Ville non précisée"}</p>
+                        <p>Type: {assetTypeLabel(listing.asset_type)}</p>
+                        <p>Prix: {formatMoney(listing.price)}</p>
+                        <p>Surface: {listing.area_sqm ? `${listing.area_sqm} m²` : "N/A"}</p>
+                        <p>Prix / m²: {listing.price_per_sqm ? formatMoney(listing.price_per_sqm) : "N/A"}</p>
                       </div>
-                      <span className="rounded-full bg-surface-container-low px-3 py-1 text-[10px] font-bold text-on-surface-variant whitespace-nowrap">
-                        {relativeDate(listing.last_seen_at)}
-                      </span>
-                    </div>
 
-                    <div className="space-y-2 text-sm text-on-surface-variant">
-                      <p>{listing.district ? `${listing.district}, ${listing.city}` : listing.city || "Ville non précisée"}</p>
-                      <p>Type: {assetTypeLabel(listing.asset_type)}</p>
-                      <p>Prix: {formatMoney(listing.price)}</p>
-                      <p>Surface: {listing.area_sqm ? `${listing.area_sqm} m²` : "N/A"}</p>
-                      <p>Prix / m²: {listing.price_per_sqm ? formatMoney(listing.price_per_sqm) : "N/A"}</p>
+                      <div className="mt-5 flex items-center justify-between gap-4">
+                        <span className="text-xs font-semibold text-on-surface-variant">
+                          {images.length} image{images.length > 1 ? "s" : ""}
+                        </span>
+                        <a
+                          className="inline-flex items-center gap-2 text-sm font-bold text-secondary hover:underline"
+                          href={listing.external_url}
+                          rel="noreferrer"
+                          target="_blank"
+                        >
+                          Ouvrir l'annonce
+                          <span className="material-symbols-outlined text-base">open_in_new</span>
+                        </a>
+                      </div>
                     </div>
-
-                    <div className="mt-5 flex items-center justify-between gap-4">
-                      <span className="text-xs font-semibold text-on-surface-variant">
-                        {listing.image_urls.length} image{listing.image_urls.length > 1 ? "s" : ""}
-                      </span>
-                      <a
-                        className="inline-flex items-center gap-2 text-sm font-bold text-secondary hover:underline"
-                        href={listing.external_url}
-                        rel="noreferrer"
-                        target="_blank"
-                      >
-                        Ouvrir l'annonce
-                        <span className="material-symbols-outlined text-base">open_in_new</span>
-                      </a>
-                    </div>
-                  </div>
-                </article>
-              ))}
+                  </article>
+                );
+              })}
             </section>
 
             <section className="mt-8 flex flex-col md:flex-row items-center justify-between gap-4 rounded-2xl bg-surface-container-lowest px-6 py-5 shadow-[0_12px_40px_rgba(26,28,29,0.06)]">

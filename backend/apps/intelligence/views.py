@@ -40,6 +40,16 @@ def money_to_float(value):
     return float(value)
 
 
+def json_safe(value):
+    if isinstance(value, Decimal):
+        return float(value)
+    if isinstance(value, dict):
+        return {key: json_safe(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [json_safe(item) for item in value]
+    return value
+
+
 class ScenarioViewSet(viewsets.ModelViewSet):
     serializer_class = ScenarioSerializer
 
@@ -343,17 +353,8 @@ class MarketValuationView(APIView):
             )
 
         title = payload.get("title") or f"Estimation marche {payload['city']}"
-        valuation = Valuation.objects.create(
-            organization=organization,
-            asset=asset,
-            requested_by=request.user if request.user.is_authenticated else None,
-            title=title,
-            estimated_value=result["estimated_value"],
-            low_estimate=result["low_estimate"],
-            high_estimate=result["high_estimate"],
-            confidence_score=result["confidence_score"],
-            model_version=result.get("model_version", result["method"]),
-            input_payload={
+        input_payload = json_safe(
+            {
                 "features": {
                     "city": payload["city"],
                     "district": payload.get("district", ""),
@@ -366,7 +367,19 @@ class MarketValuationView(APIView):
                 "sample_size": result.get("sample_size", 0),
                 "training_rows": result.get("training_rows", 0),
                 "models": result.get("models", []),
-            },
+            }
+        )
+        valuation = Valuation.objects.create(
+            organization=organization,
+            asset=asset,
+            requested_by=request.user if request.user.is_authenticated else None,
+            title=title,
+            estimated_value=result["estimated_value"],
+            low_estimate=result["low_estimate"],
+            high_estimate=result["high_estimate"],
+            confidence_score=result["confidence_score"],
+            model_version=result.get("model_version", result["method"]),
+            input_payload=input_payload,
             summary=(
                 "Estimation ML basee sur "
                 f"{result.get('sample_size', 0)} comparables et "

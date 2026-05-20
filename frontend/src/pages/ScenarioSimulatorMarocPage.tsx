@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import ImportedPageDocument from "../components/ImportedPageDocument";
 import { useAuth } from "../auth/AuthContext";
 import { WorkspacePageLoader } from "../components/LoadingState";
-import { apiRequest, getErrorMessage } from "../lib/api";
+import { apiRequest, clearApiCache, getErrorMessage } from "../lib/api";
 
 const pageStyles = `.material-symbols-outlined {
             font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
@@ -193,6 +193,10 @@ function buildScenarioPayload(form: ScenarioForm, strategy: StrategyKey) {
   return base;
 }
 
+function scenarioCacheKey(strategy: StrategyKey, payload: ReturnType<typeof buildScenarioPayload>) {
+  return `ml-scenario:${strategy}:${JSON.stringify(payload)}`;
+}
+
 function strategySortScore(simulation: ScenarioSimulationResponse | null) {
   if (!simulation) {
     return -Infinity;
@@ -260,14 +264,23 @@ export default function ScenarioSimulatorMarocPage() {
 
         try {
           const payloads = strategyOrder.map((strategy) =>
-            apiRequest<ScenarioSimulationResponse>("/ml/scenario-simulation/", {
-              method: "POST",
-              token,
-              body: buildScenarioPayload(form, strategy),
+            ({
+              payload: buildScenarioPayload(form, strategy),
+              strategy,
             }),
           );
 
-          const [longTerm, seasonal, flip] = await Promise.all(payloads);
+          const [longTerm, seasonal, flip] = await Promise.all(
+            payloads.map(({ payload, strategy }) =>
+              apiRequest<ScenarioSimulationResponse>("/ml/scenario-simulation/", {
+                body: payload,
+                cacheKey: scenarioCacheKey(strategy, payload),
+                cacheTtlMs: 120_000,
+                method: "POST",
+                token,
+              }),
+            ),
+          );
 
           if (!active) {
             return;
@@ -389,6 +402,8 @@ export default function ScenarioSimulatorMarocPage() {
       });
 
       setSavedScenarios((current) => [response, ...current]);
+      clearApiCache("/scenarios/");
+      clearApiCache("/dashboard/overview/");
       setSaveMessage("Scénario enregistré avec succès dans la base.");
     } catch (requestError) {
       setSaveMessage(getErrorMessage(requestError, "Impossible d'enregistrer ce scénario."));

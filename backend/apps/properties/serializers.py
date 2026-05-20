@@ -50,7 +50,6 @@ class MarketListingSerializer(serializers.ModelSerializer):
             "source_id",
             "external_url",
             "title",
-            "description",
             "asset_type",
             "transaction_type",
             "city",
@@ -68,7 +67,6 @@ class MarketListingSerializer(serializers.ModelSerializer):
             "published_label",
             "scraped_at",
             "last_seen_at",
-            "raw_payload",
             "created_at",
             "updated_at",
         ]

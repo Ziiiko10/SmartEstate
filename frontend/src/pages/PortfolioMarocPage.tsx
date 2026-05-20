@@ -1,4 +1,4 @@
-import { startTransition, useDeferredValue, useEffect, useState } from "react";
+import { startTransition, useDeferredValue, useEffect, useMemo, useState } from "react";
 import ImportedPageDocument from "../components/ImportedPageDocument";
 import { DashboardPageLoader } from "../components/LoadingState";
 import { useAuth } from "../auth/AuthContext";
@@ -51,22 +51,6 @@ type Asset = {
   name: string;
   occupancy_rate: string;
   status: string;
-};
-
-type MarketListing = {
-  area_sqm: string | null;
-  city: string;
-  district: string;
-  external_url: string;
-  id: number;
-  image_urls: string[];
-  last_seen_at: string;
-  price: string | null;
-  price_per_sqm: number | null;
-  primary_image_url: string;
-  source: string;
-  title: string;
-  transaction_type: string;
 };
 
 type DashboardOverview = {
@@ -140,24 +124,11 @@ function assetTypeLabel(assetType: string) {
   return labels[assetType] ?? assetType;
 }
 
-function relativeDate(value: string) {
-  const date = new Date(value);
-  const diffMs = Date.now() - date.getTime();
-  const diffHours = Math.max(1, Math.round(diffMs / 3600000));
-  if (diffHours < 24) {
-    return `Il y a ${diffHours} h`;
-  }
-  return new Intl.DateTimeFormat("fr-MA", {
-    dateStyle: "medium",
-  }).format(date);
-}
-
 export default function PortfolioMarocPage() {
   const { token } = useAuth();
   const [assets, setAssets] = useState<Asset[]>([]);
   const [dashboard, setDashboard] = useState<DashboardOverview>(emptyOverview);
   const [holdings, setHoldings] = useState<Holding[]>([]);
-  const [marketListings, setMarketListings] = useState<MarketListing[]>([]);
   const [portfolios, setPortfolios] = useState<Portfolio[]>([]);
   const [query, setQuery] = useState("");
   const [error, setError] = useState("");
@@ -172,11 +143,10 @@ export default function PortfolioMarocPage() {
       setError("");
 
       try {
-        const [portfolioData, holdingData, assetData, listingData, overviewData] = await Promise.all([
+        const [portfolioData, holdingData, assetData, overviewData] = await Promise.all([
           apiRequest<Portfolio[]>("/portfolios/", { token }),
           apiRequest<Holding[]>("/holdings/", { token }),
           apiRequest<Asset[]>("/assets/", { token }),
-          apiRequest<MarketListing[]>("/market-listings/?transaction_type=sale&limit=30", { token }),
           apiRequest<DashboardOverview>("/dashboard/overview/", { token }),
         ]);
 
@@ -188,7 +158,6 @@ export default function PortfolioMarocPage() {
           setPortfolios(portfolioData);
           setHoldings(holdingData);
           setAssets(assetData);
-          setMarketListings(listingData);
           setDashboard({ ...emptyOverview, ...overviewData });
         });
       } catch (requestError) {
@@ -210,33 +179,30 @@ export default function PortfolioMarocPage() {
     };
   }, [token]);
 
-  const filteredAssets = assets.filter((asset) => {
-    if (!deferredQuery) {
-      return true;
-    }
+  const filteredAssets = useMemo(
+    () =>
+      assets.filter((asset) => {
+        if (!deferredQuery) {
+          return true;
+        }
 
-    return [asset.name, asset.city, asset.district, assetTypeLabel(asset.asset_type)]
-      .join(" ")
-      .toLowerCase()
-      .includes(deferredQuery);
-  });
+        return [asset.name, asset.city, asset.district, assetTypeLabel(asset.asset_type)]
+          .join(" ")
+          .toLowerCase()
+          .includes(deferredQuery);
+      }),
+    [assets, deferredQuery],
+  );
 
-  const filteredListings = marketListings.filter((listing) => {
-    if (!deferredQuery) {
-      return true;
-    }
-
-    return [listing.title, listing.city, listing.district, listing.source]
-      .join(" ")
-      .toLowerCase()
-      .includes(deferredQuery);
-  });
+  const holdingsByAssetId = useMemo(
+    () => new Map(holdings.map((holding) => [holding.asset, holding])),
+    [holdings],
+  );
   const isInitialLoading =
     isLoading &&
     portfolios.length === 0 &&
     holdings.length === 0 &&
     assets.length === 0 &&
-    marketListings.length === 0 &&
     !error;
 
   return (
@@ -373,7 +339,7 @@ export default function PortfolioMarocPage() {
                   value={formatPercent(dashboard.average_annual_yield)}
                 />
                 <MetricCard
-                  helper={`${filteredListings.length} annonces vente visibles`}
+                  helper="Calcule a partir des actifs stockes"
                   label="Taux d'Occupation"
                   tone="neutral"
                   value={formatPercent(dashboard.average_occupancy_rate)}
@@ -408,7 +374,7 @@ export default function PortfolioMarocPage() {
             ) : (
               <div className="grid grid-cols-1 gap-6">
                 {filteredAssets.map((asset) => {
-                  const holding = holdings.find((item) => item.asset === asset.id);
+                  const holding = holdingsByAssetId.get(asset.id);
                   return (
                     <article className="group bg-surface-container-lowest rounded-xl p-5 flex gap-8 items-start hover:shadow-[0_12px_32px_rgba(0,0,0,0.06)] transition-all duration-300" key={asset.id}>
                       <div className={`w-48 h-32 rounded-2xl bg-gradient-to-br ${cityGradient(asset.city)} p-5 text-white shrink-0 flex flex-col justify-between`}>
@@ -455,69 +421,6 @@ export default function PortfolioMarocPage() {
             )}
           </section>
 
-          <section className="px-12 py-12">
-            <div className="flex items-center justify-between mb-8">
-              <div>
-                <h3 className="text-2xl font-headline font-bold text-primary">Annonces marche indexees</h3>
-                <p className="mt-2 text-sm text-on-surface-variant">Ce bloc vient de `GET /api/market-listings/` et montre les donnees ETL recuperees depuis Avito et Mubawab.</p>
-              </div>
-              <a className="text-secondary font-bold text-sm hover:underline" href="/annonces-etl">Voir toutes les annonces ETL</a>
-            </div>
-
-            {filteredListings.length === 0 ? (
-              <div className="rounded-xl bg-surface-container-low p-8 text-sm font-semibold text-on-surface-variant">Aucune annonce ETL ne correspond au filtre actuel.</div>
-            ) : (
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {filteredListings.slice(0, 6).map((listing) => (
-                  <article className="rounded-2xl border border-slate-200/60 bg-white overflow-hidden shadow-sm" key={listing.id}>
-                    <div className="aspect-[16/10] bg-surface-container-low overflow-hidden">
-                      {listing.primary_image_url ? (
-                        <img
-                          alt={listing.title}
-                          className="h-full w-full object-cover transition-transform duration-500 hover:scale-105"
-                          src={listing.primary_image_url}
-                        />
-                      ) : (
-                        <div className={`h-full w-full bg-gradient-to-br ${cityGradient(listing.city)} p-6 text-white flex flex-col justify-between`}>
-                          <span className="text-[10px] uppercase tracking-[0.22em] font-bold opacity-80">{listing.source}</span>
-                          <div>
-                            <p className="text-2xl font-headline font-extrabold">{listing.city || "Maroc"}</p>
-                            <p className="text-sm opacity-80">{listing.district || "Annonce ETL"}</p>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                    <div className="p-6">
-                      <div className="flex items-start justify-between gap-4 mb-4">
-                        <div>
-                          <p className="text-[10px] uppercase tracking-[0.22em] font-bold text-secondary">{listing.source}</p>
-                          <h4 className="mt-2 text-lg font-headline font-bold text-primary line-clamp-2">{listing.title}</h4>
-                        </div>
-                        <span className="rounded-full bg-surface-container-low px-3 py-1 text-[10px] font-bold text-on-surface-variant">
-                          {relativeDate(listing.last_seen_at)}
-                        </span>
-                      </div>
-                      <div className="space-y-2 text-sm text-on-surface-variant">
-                        <p>{listing.district ? `${listing.district}, ${listing.city}` : listing.city}</p>
-                        <p>Prix: {formatMoney(listing.price)}</p>
-                        <p>Surface: {listing.area_sqm ? `${listing.area_sqm} m²` : "N/A"}</p>
-                        <p>Prix / m²: {listing.price_per_sqm ? formatMoney(listing.price_per_sqm, false) : "N/A"}</p>
-                      </div>
-                      <a
-                        className="mt-5 inline-flex items-center gap-2 text-sm font-bold text-secondary hover:underline"
-                        href={listing.external_url}
-                        rel="noreferrer"
-                        target="_blank"
-                      >
-                        Ouvrir l'annonce
-                        <span className="material-symbols-outlined text-base">open_in_new</span>
-                      </a>
-                    </div>
-                  </article>
-                ))}
-              </div>
-            )}
-          </section>
             </>
           )}
         </main>
