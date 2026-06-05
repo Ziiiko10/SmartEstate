@@ -1,14 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
 import ImportedPageDocument from "../components/ImportedPageDocument";
 import { DashboardPageLoader } from "../components/LoadingState";
 import { useAuth } from "../auth/AuthContext";
 import { apiRequest, getErrorMessage } from "../lib/api";
+import { USER_ROLES } from "../lib/roles";
 
 const pageStyles = `.material-symbols-outlined {
             font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
             vertical-align: middle;
         }`;
+
+const DASHBOARD_OVERVIEW_WITH_OPPORTUNITIES_PATH = "/dashboard/overview/?include_opportunities=1";
 
 type ApiNumber = number | string | null;
 
@@ -63,6 +65,12 @@ type RecommendationRecord = {
   title: string;
 };
 
+type GlobalSearchOption = {
+  label: string;
+  matchTerms: string[];
+  value: string;
+};
+
 const emptyOverview: DashboardOverview = {
   average_market_price_per_sqm: 0,
   market_cities: [],
@@ -80,6 +88,10 @@ function toNumber(value: ApiNumber | undefined) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function normalizeText(value: string | null | undefined) {
+  return (value ?? "").trim().toLowerCase();
+}
+
 function formatMoney(value: ApiNumber | undefined, compact = false) {
   const amount = toNumber(value);
   if (compact && Math.abs(amount) >= 1_000_000) {
@@ -91,7 +103,7 @@ function formatMoney(value: ApiNumber | undefined, compact = false) {
 
   return `${amount.toLocaleString("fr-MA", {
     maximumFractionDigits: 0,
-  })} MAD`;
+  })} DH`;
 }
 
 function formatPercent(value: ApiNumber | undefined) {
@@ -176,11 +188,20 @@ function categoryLabel(category: string) {
   return labels[category] ?? category;
 }
 
+function matchesSearchTerms(values: Array<string | null | undefined>, matchTerms: string[]) {
+  if (matchTerms.length === 0) {
+    return true;
+  }
+
+  const haystack = values.map((value) => normalizeText(value)).join(" ");
+  return matchTerms.every((term) => haystack.includes(normalizeText(term)));
+}
+
 export default function AiRecommendationsPage() {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const [overview, setOverview] = useState<DashboardOverview>(emptyOverview);
   const [recommendations, setRecommendations] = useState<RecommendationRecord[]>([]);
-  const [query, setQuery] = useState("");
+  const [selectedSearch, setSelectedSearch] = useState("all");
   const [selectedSignal, setSelectedSignal] = useState("all");
   const [selectedSource, setSelectedSource] = useState("all");
   const [error, setError] = useState("");
@@ -195,7 +216,7 @@ export default function AiRecommendationsPage() {
 
       try {
         const [overviewPayload, recommendationPayload] = await Promise.all([
-          apiRequest<DashboardOverview>("/dashboard/overview/", { token }),
+          apiRequest<DashboardOverview>(DASHBOARD_OVERVIEW_WITH_OPPORTUNITIES_PATH, { token }),
           apiRequest<RecommendationRecord[]>("/recommendations/", { token }),
         ]);
 
@@ -223,9 +244,54 @@ export default function AiRecommendationsPage() {
     };
   }, [token]);
 
-  const filteredOpportunities = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
+  const searchOptions = useMemo<GlobalSearchOption[]>(() => {
+    const options: GlobalSearchOption[] = [
+      {
+        label: "Toutes les villes",
+        matchTerms: [],
+        value: "all",
+      },
+    ];
 
+    const cityCounts = new Map<string, number>();
+
+    overview.market_cities.forEach((city) => {
+      const cityName = city.city.trim();
+      if (!cityName) {
+        return;
+      }
+
+      cityCounts.set(cityName, city.listing_count ?? cityCounts.get(cityName) ?? 0);
+    });
+
+    overview.opportunities.forEach((opportunity) => {
+      const cityName = opportunity.city.trim();
+      if (!cityName || cityCounts.has(cityName)) {
+        return;
+      }
+
+      cityCounts.set(cityName, 0);
+    });
+
+    Array.from(cityCounts.entries())
+      .sort(([left], [right]) => left.localeCompare(right, "fr"))
+      .forEach(([cityName, count]) => {
+        options.push({
+          label: count > 0 ? `${cityName} (${count})` : cityName,
+          matchTerms: [cityName],
+          value: `city:${normalizeText(cityName)}`,
+        });
+      });
+
+    return options;
+  }, [overview.market_cities, overview.opportunities]);
+
+  const selectedSearchOption = useMemo(
+    () => searchOptions.find((option) => option.value === selectedSearch) ?? searchOptions[0],
+    [searchOptions, selectedSearch],
+  );
+
+  const filteredOpportunities = useMemo(() => {
     return overview.opportunities.filter((opportunity) => {
       if (selectedSignal !== "all" && opportunity.signal !== selectedSignal) {
         return false;
@@ -235,36 +301,26 @@ export default function AiRecommendationsPage() {
         return false;
       }
 
-      if (!normalizedQuery) {
-        return true;
-      }
-
-      return [opportunity.title, opportunity.city, opportunity.district, opportunity.source]
-        .join(" ")
-        .toLowerCase()
-        .includes(normalizedQuery);
+      return matchesSearchTerms(
+        [opportunity.title, opportunity.city, opportunity.district, opportunity.source],
+        selectedSearchOption.matchTerms,
+      );
     });
-  }, [overview.opportunities, query, selectedSignal, selectedSource]);
+  }, [overview.opportunities, selectedSearchOption, selectedSignal, selectedSource]);
 
   const filteredRecommendations = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
-
-    if (!normalizedQuery) {
-      return recommendations;
-    }
-
     return recommendations.filter((recommendation) =>
-      [
-        recommendation.title,
-        recommendation.description,
-        recommendation.organization_name,
-        recommendation.asset_name ?? "",
-      ]
-        .join(" ")
-        .toLowerCase()
-        .includes(normalizedQuery),
+      matchesSearchTerms(
+        [
+          recommendation.title,
+          recommendation.description,
+          recommendation.organization_name,
+          recommendation.asset_name ?? "",
+        ],
+        selectedSearchOption.matchTerms,
+      ),
     );
-  }, [query, recommendations]);
+  }, [recommendations, selectedSearchOption]);
 
   const averageOpportunityScore =
     filteredOpportunities.length > 0
@@ -280,11 +336,15 @@ export default function AiRecommendationsPage() {
     overview.opportunities.length === 0 &&
     recommendations.length === 0 &&
     !error;
+  const pageHeading =
+    user?.role === USER_ROLES.UTILISATEUR_SIMPLE
+      ? "Recommandations personnalisées"
+      : "Recommandations d'investissement";
 
   return (
     <ImportedPageDocument
       bodyClassName="bg-background font-body text-on-surface antialiased"
-      title="SmartEstate | Recommandations IA"
+      title={`SmartEstate | ${pageHeading}`}
       styles={pageStyles}
     >
       <main className="md:ml-72 min-h-screen px-6 md:px-12 py-8">
@@ -298,7 +358,7 @@ export default function AiRecommendationsPage() {
               Flux ETL + moteur ML
             </span>
             <h1 className="text-4xl md:text-5xl font-headline font-extrabold tracking-tight text-primary">
-              Recommandations d'investissement
+              {pageHeading}
             </h1>
             <p className="mt-3 text-sm md:text-base leading-relaxed text-on-surface-variant">
               Cette section exploite vos annonces scrapées et les estimations machine learning pour mettre
@@ -310,13 +370,6 @@ export default function AiRecommendationsPage() {
             <div className="rounded-xl bg-surface-container-low px-4 py-3 text-sm font-semibold text-on-surface-variant">
               Actualisé le {formatDate(overview.refreshed_at)}
             </div>
-            <Link
-              className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-bold text-white shadow-sm"
-              to="/estimation-immobiliere-ia"
-            >
-              <span className="material-symbols-outlined text-base">calculate</span>
-              Lancer une estimation
-            </Link>
           </div>
         </section>
 
@@ -346,13 +399,17 @@ export default function AiRecommendationsPage() {
                 <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-base">
                   search
                 </span>
-                <input
+                <select
                   className="w-full rounded-xl border-none bg-surface-container-low py-3 pl-10 pr-4 text-sm focus:ring-2 focus:ring-secondary/20"
-                  onChange={(event) => setQuery(event.target.value)}
-                  placeholder="Titre, ville, organisation, actif..."
-                  type="text"
-                  value={query}
-                />
+                  onChange={(event) => setSelectedSearch(event.target.value)}
+                  value={selectedSearch}
+                >
+                  {searchOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
               </div>
             </label>
 

@@ -64,6 +64,15 @@ type ValuationRecord = {
   title: string;
 };
 
+type ReportSearchGroup = "general" | "organizations" | "portfolios" | "assets";
+
+type ReportSearchOption = {
+  group: ReportSearchGroup;
+  label: string;
+  matchTerms: string[];
+  value: string;
+};
+
 const emptyOverview: DashboardOverview = {
   average_annual_yield: 0,
   growth_series: [],
@@ -94,7 +103,7 @@ function formatMoney(value: ApiNumber | undefined, compact = false) {
 
   return `${amount.toLocaleString("fr-MA", {
     maximumFractionDigits: 0,
-  })} MAD`;
+  })} DH`;
 }
 
 function formatPercent(value: ApiNumber | undefined) {
@@ -113,6 +122,19 @@ function formatDate(value: string) {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(new Date(value));
+}
+
+function normalizeText(value: string | null | undefined) {
+  return (value ?? "").trim().toLowerCase();
+}
+
+function matchesSearchTerms(values: Array<string | null | undefined>, matchTerms: string[]) {
+  if (matchTerms.length === 0) {
+    return true;
+  }
+
+  const haystack = values.map((value) => normalizeText(value)).join(" ");
+  return matchTerms.every((term) => haystack.includes(normalizeText(term)));
 }
 
 function reportTypeLabel(value: string) {
@@ -155,7 +177,7 @@ export default function ReportsPage() {
   const [overview, setOverview] = useState<DashboardOverview>(emptyOverview);
   const [reports, setReports] = useState<ReportRecord[]>([]);
   const [valuations, setValuations] = useState<ValuationRecord[]>([]);
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState("all");
   const [selectedType, setSelectedType] = useState("all");
   const [selectedStatus, setSelectedStatus] = useState("all");
   const [error, setError] = useState("");
@@ -200,9 +222,107 @@ export default function ReportsPage() {
     };
   }, [token]);
 
-  const filteredReports = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
+  const searchOptions = useMemo<ReportSearchOption[]>(() => {
+    const options: ReportSearchOption[] = [
+      {
+        group: "general",
+        label: "Tous les rapports",
+        matchTerms: [],
+        value: "all",
+      },
+    ];
 
+    const organizationCounts = new Map<string, number>();
+    const portfolioCounts = new Map<string, number>();
+    const assetCounts = new Map<string, number>();
+
+    reports.forEach((report) => {
+      const organization = report.organization_name.trim();
+      const portfolio = report.portfolio_name?.trim() ?? "";
+      const asset = report.asset_name?.trim() ?? "";
+
+      if (organization) {
+        organizationCounts.set(organization, (organizationCounts.get(organization) ?? 0) + 1);
+      }
+      if (portfolio) {
+        portfolioCounts.set(portfolio, (portfolioCounts.get(portfolio) ?? 0) + 1);
+      }
+      if (asset) {
+        assetCounts.set(asset, (assetCounts.get(asset) ?? 0) + 1);
+      }
+    });
+
+    valuations.forEach((valuation) => {
+      const organization = valuation.organization_name.trim();
+      const asset = valuation.asset_name?.trim() ?? "";
+
+      if (organization) {
+        organizationCounts.set(organization, (organizationCounts.get(organization) ?? 0) + 1);
+      }
+      if (asset) {
+        assetCounts.set(asset, (assetCounts.get(asset) ?? 0) + 1);
+      }
+    });
+
+    Array.from(organizationCounts.entries())
+      .sort(([left], [right]) => left.localeCompare(right, "fr"))
+      .forEach(([organization, count]) => {
+        options.push({
+          group: "organizations",
+          label: `${organization} (${count})`,
+          matchTerms: [organization],
+          value: `organization:${normalizeText(organization)}`,
+        });
+      });
+
+    Array.from(portfolioCounts.entries())
+      .sort(([left], [right]) => left.localeCompare(right, "fr"))
+      .forEach(([portfolio, count]) => {
+        options.push({
+          group: "portfolios",
+          label: `${portfolio} (${count})`,
+          matchTerms: [portfolio],
+          value: `portfolio:${normalizeText(portfolio)}`,
+        });
+      });
+
+    Array.from(assetCounts.entries())
+      .sort(([left], [right]) => left.localeCompare(right, "fr"))
+      .forEach(([asset, count]) => {
+        options.push({
+          group: "assets",
+          label: `${asset} (${count})`,
+          matchTerms: [asset],
+          value: `asset:${normalizeText(asset)}`,
+        });
+      });
+
+    return options;
+  }, [reports, valuations]);
+
+  const selectedSearchOption = useMemo(
+    () => searchOptions.find((option) => option.value === query) ?? searchOptions[0],
+    [query, searchOptions],
+  );
+
+  const groupedSearchOptions = useMemo(
+    () =>
+      searchOptions.reduce<Record<ReportSearchGroup, ReportSearchOption[]>>(
+        (groups, option) => {
+          groups[option.group].push(option);
+          return groups;
+        },
+        {
+          assets: [],
+          general: [],
+          organizations: [],
+          portfolios: [],
+        },
+      ),
+    [searchOptions],
+  );
+
+  const filteredReports = useMemo(() => {
     return reports.filter((report) => {
       if (selectedType !== "all" && report.report_type !== selectedType) {
         return false;
@@ -210,36 +330,28 @@ export default function ReportsPage() {
       if (selectedStatus !== "all" && report.status !== selectedStatus) {
         return false;
       }
-      if (!normalizedQuery) {
-        return true;
-      }
 
-      return [
-        report.title,
-        report.summary,
-        report.organization_name,
-        report.asset_name ?? "",
-        report.portfolio_name ?? "",
-      ]
-        .join(" ")
-        .toLowerCase()
-        .includes(normalizedQuery);
+      return matchesSearchTerms(
+        [
+          report.title,
+          report.summary,
+          report.organization_name,
+          report.asset_name ?? "",
+          report.portfolio_name ?? "",
+        ],
+        selectedSearchOption.matchTerms,
+      );
     });
-  }, [query, reports, selectedStatus, selectedType]);
+  }, [reports, selectedSearchOption, selectedStatus, selectedType]);
 
   const filteredValuations = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
-    if (!normalizedQuery) {
-      return valuations;
-    }
-
     return valuations.filter((valuation) =>
-      [valuation.title, valuation.summary, valuation.organization_name, valuation.asset_name ?? ""]
-        .join(" ")
-        .toLowerCase()
-        .includes(normalizedQuery),
+      matchesSearchTerms(
+        [valuation.title, valuation.summary, valuation.organization_name, valuation.asset_name ?? ""],
+        selectedSearchOption.matchTerms,
+      ),
     );
-  }, [query, valuations]);
+  }, [selectedSearchOption, valuations]);
 
   const growthSeries =
     overview.growth_series.length > 0
@@ -288,13 +400,6 @@ export default function ReportsPage() {
             <div className="rounded-xl bg-surface-container-low px-4 py-3 text-sm font-semibold text-on-surface-variant">
               Synchronisé le {formatDate(overview.refreshed_at)}
             </div>
-            <Link
-              className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-bold text-white shadow-sm"
-              to="/estimation-immobiliere-ia"
-            >
-              <span className="material-symbols-outlined text-base">add</span>
-              Nouvelle estimation
-            </Link>
           </div>
         </section>
 
@@ -321,13 +426,44 @@ export default function ReportsPage() {
                 <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-base">
                   search
                 </span>
-                <input
+                <select
                   className="w-full rounded-xl border-none bg-surface-container-low py-3 pl-10 pr-4 text-sm focus:ring-2 focus:ring-secondary/20"
                   onChange={(event) => setQuery(event.target.value)}
-                  placeholder="Titre, actif, portfolio, organisation..."
-                  type="text"
                   value={query}
-                />
+                >
+                  {groupedSearchOptions.general.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                  {groupedSearchOptions.organizations.length > 0 && (
+                    <optgroup label="Organisations">
+                      {groupedSearchOptions.organizations.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                  {groupedSearchOptions.portfolios.length > 0 && (
+                    <optgroup label="Portfolios">
+                      {groupedSearchOptions.portfolios.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                  {groupedSearchOptions.assets.length > 0 && (
+                    <optgroup label="Actifs">
+                      {groupedSearchOptions.assets.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                </select>
               </div>
             </label>
 

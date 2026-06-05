@@ -8,7 +8,6 @@ Application web immobiliere avec frontend React + TypeScript et backend Django R
 - Backend: Django, Django REST Framework
 - Base principale: PostgreSQL
 - Cache et sessions: Redis
-- Base documentaire optionnelle: MongoDB
 - Orchestration: Docker Compose
 
 ## Structure du projet
@@ -67,7 +66,7 @@ docker compose down
 
 ## Lancement avec bases de donnees en ligne
 
-Par defaut, `docker compose` utilise les services `postgres`, `redis` et `mongodb` definis dans [`docker-compose.yml`](./docker-compose.yml).
+Par defaut, `docker compose` utilise les services `postgres` et `redis` definis dans [`docker-compose.yml`](./docker-compose.yml).
 
 Si vous voulez garder Docker pour lancer l'application, mais utiliser des bases distantes, definissez vos variables avant le lancement.
 
@@ -78,7 +77,6 @@ $env:SMARTESTATE_USE_MANAGED_SERVICES="True"
 $env:DATABASE_URL="postgresql://USER:PASSWORD@HOST:5432/DBNAME?sslmode=require"
 $env:REDIS_URL="rediss://default:PASSWORD@HOST:PORT/0"
 $env:CELERY_BROKER_URL=$env:REDIS_URL
-$env:MONGODB_URL=""
 docker compose up --build -d
 ```
 
@@ -87,7 +85,6 @@ Variables importantes:
 - `DATABASE_URL`: PostgreSQL distant
 - `REDIS_URL`: Redis distant
 - `CELERY_BROKER_URL`: broker Redis pour les taches async
-- `MONGODB_URL`: MongoDB distant si necessaire
 
 ## Lancement en local sans Docker
 
@@ -116,8 +113,10 @@ Important:
 
 Si les donnees de demo sont chargees, vous pouvez utiliser:
 
-- Email: `yassine@smartestate.ma`
-- Mot de passe: `demo12345`
+- Interface 1 utilisateur simple: `zakaria.bouguerfa@gmail.com`
+- Interface 2 agent immobilier: `zakaria.bouguerfa18@gmail.com`
+- Interface 3 administrateur: `majid.bourza12@gmail.com`
+- Mot de passe pour les 3 comptes: `123456789`
 
 Pour recharger les donnees de demo:
 

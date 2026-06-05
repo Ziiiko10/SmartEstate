@@ -12,9 +12,31 @@ from apps.properties.models import PropertyAsset
 
 class Command(BaseCommand):
     help = "Cree un jeu de donnees SmartEstate de demonstration."
+    demo_password = "123456789"
 
     def handle(self, *args, **options):
         User = get_user_model()
+
+        def sync_demo_user(
+            *,
+            email: str,
+            full_name: str,
+            phone_number: str,
+            role: str,
+            is_staff: bool = False,
+            is_superuser: bool = False,
+        ):
+            user, _ = User.objects.get_or_create(email=email)
+            user.full_name = full_name
+            user.phone_number = phone_number
+            user.role = role
+            user.is_active = True
+            user.is_staff = is_staff
+            user.is_superuser = is_superuser
+            user.set_password(self.demo_password)
+            user.save()
+            Token.objects.get_or_create(user=user)
+            return user
 
         organization, _ = Organization.objects.get_or_create(
             slug="smartestate-morocco",
@@ -26,58 +48,38 @@ class Command(BaseCommand):
             },
         )
 
-        admin_user, _ = User.objects.get_or_create(
-            email="yassine@smartestate.ma",
-            defaults={
-                "full_name": "Yassine Mansouri",
-                "phone_number": "+212600000000",
-                "role": User.Role.ADMIN,
-                "is_staff": True,
-                "is_superuser": True,
-            },
+        admin_user = sync_demo_user(
+            email="majid.bourza12@gmail.com",
+            full_name="Majid Bourza",
+            phone_number="+212600000000",
+            role=User.Role.ADMINISTRATEUR,
+            is_staff=True,
+            is_superuser=True,
         )
-        admin_user.set_password("demo12345")
-        admin_user.save()
-        Token.objects.get_or_create(user=admin_user)
 
-        analyst_user, _ = User.objects.get_or_create(
-            email="salma@smartestate.ma",
-            defaults={
-                "full_name": "Salma Bennani",
-                "phone_number": "+212611111111",
-                "role": User.Role.ANALYST,
-            },
+        agent_user = sync_demo_user(
+            email="zakaria.bouguerfa18@gmail.com",
+            full_name="Zakaria Bouguerfa",
+            phone_number="+212611111111",
+            role=User.Role.AGENT_IMMOBILIER,
         )
-        analyst_user.set_password("demo12345")
-        analyst_user.save()
-        Token.objects.get_or_create(user=analyst_user)
 
-        manager_user, _ = User.objects.get_or_create(
-            email="mehdi@smartestate.ma",
-            defaults={
-                "full_name": "Mehdi Alaoui",
-                "phone_number": "+212622222222",
-                "role": User.Role.ASSET_MANAGER,
-            },
+        simple_user = sync_demo_user(
+            email="zakaria.bouguerfa@gmail.com",
+            full_name="Zakaria Bouguerfa",
+            phone_number="+212622222222",
+            role=User.Role.UTILISATEUR_SIMPLE,
         )
-        manager_user.set_password("demo12345")
-        manager_user.save()
-        Token.objects.get_or_create(user=manager_user)
 
         Membership.objects.get_or_create(
             organization=organization,
             user=admin_user,
-            defaults={"role": Membership.Role.OWNER, "title": "Directeur d'Investissement", "is_primary": True},
+            defaults={"role": Membership.Role.OWNER, "title": "Administrateur plateforme", "is_primary": True},
         )
         Membership.objects.get_or_create(
             organization=organization,
-            user=analyst_user,
-            defaults={"role": Membership.Role.ANALYST, "title": "Analyste Marche"},
-        )
-        Membership.objects.get_or_create(
-            organization=organization,
-            user=manager_user,
-            defaults={"role": Membership.Role.MANAGER, "title": "Portfolio Manager"},
+            user=agent_user,
+            defaults={"role": Membership.Role.MANAGER, "title": "Agent immobilier senior"},
         )
 
         assets_data = [
@@ -199,7 +201,7 @@ class Command(BaseCommand):
             asset=created_assets[0],
             title="Estimation Tour CFC Analytics",
             defaults={
-                "requested_by": analyst_user,
+                "requested_by": agent_user,
                 "estimated_value": Decimal("125000000.00"),
                 "low_estimate": Decimal("120000000.00"),
                 "high_estimate": Decimal("129500000.00"),
@@ -245,4 +247,12 @@ class Command(BaseCommand):
         )
 
         self.stdout.write(self.style.SUCCESS("Jeu de donnees SmartEstate cree avec succes."))
-        self.stdout.write("Admin demo: yassine@smartestate.ma / demo12345")
+        self.stdout.write(
+            f"Utilisateur simple: zakaria.bouguerfa@gmail.com / {self.demo_password}"
+        )
+        self.stdout.write(
+            f"Agent immobilier: zakaria.bouguerfa18@gmail.com / {self.demo_password}"
+        )
+        self.stdout.write(
+            f"Administrateur: majid.bourza12@gmail.com / {self.demo_password}"
+        )

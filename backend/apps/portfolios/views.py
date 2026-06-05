@@ -1,11 +1,13 @@
 from rest_framework import viewsets
 
+from apps.accounts.permissions import IsAgentOrAdmin
 from smartestate_backend.access import visible_organizations
 from apps.portfolios.models import Portfolio, PortfolioHolding
 from apps.portfolios.serializers import PortfolioHoldingSerializer, PortfolioSerializer
 
 
 class PortfolioViewSet(viewsets.ModelViewSet):
+    permission_classes = [IsAgentOrAdmin]
     serializer_class = PortfolioSerializer
 
     def get_queryset(self):
@@ -28,6 +30,7 @@ class PortfolioViewSet(viewsets.ModelViewSet):
 
 
 class PortfolioHoldingViewSet(viewsets.ModelViewSet):
+    permission_classes = [IsAgentOrAdmin]
     serializer_class = PortfolioHoldingSerializer
 
     def get_queryset(self):

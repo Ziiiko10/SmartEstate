@@ -71,13 +71,6 @@ export const catalogPages: CatalogPage[] = [
     preview: "/imported-pages/estimation-immobiliere-ia.png"
   },
   {
-    title: "Portfolio Immobilier Maroc",
-    path: "/portfolio-immobilier-maroc",
-    category: "Portfolio",
-    description: "Page de portefeuille pour suivre les actifs, rendements et allocations.",
-    preview: "/imported-pages/portfolio-immobilier-maroc.png"
-  },
-  {
     title: "Gestion de l'Equipe SmartEstate",
     path: "/gestion-equipe",
     category: "Operations",

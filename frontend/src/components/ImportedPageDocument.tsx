@@ -19,7 +19,7 @@ export default function ImportedPageDocument({
   const shellRef = useRef<HTMLDivElement | null>(null);
   const navigate = useNavigate();
   const location = useLocation();
-  const { isAuthenticated, logout } = useAuth();
+  const { isAuthenticated, logout, user } = useAuth();
 
   useEffect(() => {
     document.title = title;
@@ -64,6 +64,7 @@ export default function ImportedPageDocument({
           isAuthenticated,
           logout,
           navigate,
+          userRole: user?.role,
         })
       ) {
         event.preventDefault();
@@ -74,7 +75,7 @@ export default function ImportedPageDocument({
     return () => {
       currentShell.removeEventListener("click", onClick);
     };
-  }, [isAuthenticated, location.pathname, logout, navigate]);
+  }, [isAuthenticated, location.pathname, logout, navigate, user?.role]);
 
   return (
     <>

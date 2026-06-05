@@ -1,12 +1,38 @@
-import type { PropsWithChildren } from "react";
+import { type PropsWithChildren, useEffect } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
+import { getHomeRouteForRole, getRoleNavigation, isAllowedRole, type UserRole, USER_ROLES } from "../lib/roles";
+import { authenticatedWorkspacePrefetchRoutes, prefetchRoute } from "../lib/routePrefetch";
 import DashboardSidebar from "./DashboardSidebar";
 import { AppLoadingScreen } from "./LoadingState";
 
-export default function ProtectedRoute({ children }: PropsWithChildren) {
-  const { isAuthenticated, isBootstrapping } = useAuth();
+type ProtectedRouteProps = PropsWithChildren<{
+  allowedRoles?: UserRole[];
+}>;
+
+export default function ProtectedRoute({ allowedRoles, children }: ProtectedRouteProps) {
+  const { isAuthenticated, isBootstrapping, token, user } = useAuth();
   const location = useLocation();
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      const candidateRoutes =
+        getRoleNavigation(user?.role).map((item) => item.href).concat(authenticatedWorkspacePrefetchRoutes)
+      Array.from(new Set(candidateRoutes))
+        .filter((path) => path !== location.pathname)
+        .forEach((path) => {
+          void prefetchRoute(path, { token });
+        });
+    }, 900);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [isAuthenticated, location.pathname, token, user?.role]);
 
   if (isBootstrapping) {
     return <AppLoadingScreen message="Chargement de votre session..." subtitle="Vérification des accès et préparation du dashboard." />;
@@ -16,10 +42,19 @@ export default function ProtectedRoute({ children }: PropsWithChildren) {
     return <Navigate replace state={{ from: location.pathname }} to="/connexion" />;
   }
 
+  if (!isAllowedRole(user?.role, allowedRoles)) {
+    return <Navigate replace to={getHomeRouteForRole(user?.role)} />;
+  }
+
+  const contentClassName =
+    user?.role === USER_ROLES.UTILISATEUR_SIMPLE
+      ? "smartestate-dashboard-content smartestate-dashboard-content-user"
+      : "smartestate-dashboard-content";
+
   return (
     <div className="smartestate-dashboard-shell">
       <DashboardSidebar />
-      <div className="smartestate-dashboard-content">{children}</div>
+      <div className={contentClassName}>{children}</div>
     </div>
   );
 }

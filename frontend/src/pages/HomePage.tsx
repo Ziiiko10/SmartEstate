@@ -65,7 +65,7 @@ export default function HomePage() {
                 <span className="material-symbols-outlined text-secondary text-2xl">trending_up</span>
               </div>
               <div className="flex flex-col">
-                <span className="font-extrabold text-primary text-lg">MAD 4.2M</span>
+                <span className="font-extrabold text-primary text-lg">DH 4.2M</span>
                 <span className="text-[10px] font-bold text-secondary uppercase tracking-widest">Valeur Estimée</span>
               </div>
             </div>
@@ -81,7 +81,7 @@ export default function HomePage() {
     <section className="bg-primary py-24">
       <div className="max-w-7xl mx-auto px-6 grid grid-cols-1 md:grid-cols-3 gap-12 text-center">
         <div className="flex flex-col gap-2">
-          <h2 className="text-5xl font-extrabold font-headline text-white">2.4B MAD</h2>
+          <h2 className="text-5xl font-extrabold font-headline text-white">2.4B DH</h2>
           <p className="text-primary-fixed-dim font-bold tracking-widest uppercase text-xs">d'actifs analysés</p>
         </div>
         <div className="flex flex-col gap-2 md:border-x md:border-white/10">
@@ -185,7 +185,7 @@ export default function HomePage() {
             </div>
             <div className="flex flex-row items-baseline gap-1">
               <span className="text-2xl font-black text-primary">18,500</span>
-              <span className="text-[10px] font-semibold text-on-surface-variant uppercase">MAD/m²</span>
+              <span className="text-[10px] font-semibold text-on-surface-variant uppercase">DH/m²</span>
             </div>
             <div className="h-10 w-full bg-surface-container-low rounded-lg overflow-hidden relative">
               <svg className="absolute bottom-0 w-full h-full text-secondary/20" preserveAspectRatio="none" viewBox="0 0 100 40">
@@ -201,7 +201,7 @@ export default function HomePage() {
             </div>
             <div className="flex flex-row items-baseline gap-1">
               <span className="text-2xl font-black text-primary">15,200</span>
-              <span className="text-[10px] font-semibold text-on-surface-variant uppercase">MAD/m²</span>
+              <span className="text-[10px] font-semibold text-on-surface-variant uppercase">DH/m²</span>
             </div>
             <div className="h-10 w-full bg-surface-container-low rounded-lg overflow-hidden relative">
               <svg className="absolute bottom-0 w-full h-full text-secondary/20" preserveAspectRatio="none" viewBox="0 0 100 40">
@@ -217,7 +217,7 @@ export default function HomePage() {
             </div>
             <div className="flex flex-row items-baseline gap-1">
               <span className="text-2xl font-black text-primary">12,800</span>
-              <span className="text-[10px] font-semibold text-on-surface-variant uppercase">MAD/m²</span>
+              <span className="text-[10px] font-semibold text-on-surface-variant uppercase">DH/m²</span>
             </div>
             <div className="h-10 w-full bg-surface-container-low rounded-lg overflow-hidden relative">
               <svg className="absolute bottom-0 w-full h-full text-secondary/20" preserveAspectRatio="none" viewBox="0 0 100 40">
@@ -233,7 +233,7 @@ export default function HomePage() {
             </div>
             <div className="flex flex-row items-baseline gap-1">
               <span className="text-2xl font-black text-primary">17,100</span>
-              <span className="text-[10px] font-semibold text-on-surface-variant uppercase">MAD/m²</span>
+              <span className="text-[10px] font-semibold text-on-surface-variant uppercase">DH/m²</span>
             </div>
             <div className="h-10 w-full bg-surface-container-low rounded-lg overflow-hidden relative">
               <svg className="absolute bottom-0 w-full h-full text-secondary/20" preserveAspectRatio="none" viewBox="0 0 100 40">

@@ -7,10 +7,12 @@ import {
   useState,
 } from "react";
 import { apiRequest, clearApiCache } from "../lib/api";
+import { getHomeRouteForRole, USER_ROLES } from "../lib/roles";
+import { prefetchRoute } from "../lib/routePrefetch";
 
 const LOCAL_STORAGE_TOKEN_KEY = "smartestate.auth.token";
 const SESSION_STORAGE_TOKEN_KEY = "smartestate.auth.session-token";
-const PUBLIC_DEMO_ACCESS = import.meta.env.VITE_PUBLIC_DEMO_ACCESS?.toLowerCase() !== "false";
+const PUBLIC_DEMO_ACCESS = import.meta.env.VITE_PUBLIC_DEMO_ACCESS?.toLowerCase() === "true";
 
 export type AuthUser = {
   created_at: string;
@@ -41,6 +43,12 @@ type RegisterPayload = {
   role?: string;
 };
 
+type UpdateProfilePayload = {
+  email: string;
+  full_name: string;
+  phone_number: string;
+};
+
 type AuthContextValue = {
   isAuthenticated: boolean;
   isBootstrapping: boolean;
@@ -48,6 +56,7 @@ type AuthContextValue = {
   logout: () => void;
   register: (payload: RegisterPayload) => Promise<AuthUser>;
   token: null | string;
+  updateProfile: (payload: UpdateProfilePayload) => Promise<AuthUser>;
   user: AuthUser | null;
 };
 
@@ -60,7 +69,7 @@ const DEMO_USER: AuthUser = {
   id: 0,
   is_active: true,
   phone_number: "",
-  role: "demo",
+  role: USER_ROLES.UTILISATEUR_SIMPLE,
 };
 
 function getStoredToken() {
@@ -160,6 +169,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
       setToken(response.token);
       setUser(response.user);
     });
+    void prefetchRoute(getHomeRouteForRole(response.user.role), { token: response.token });
 
     return response.user;
   }
@@ -172,7 +182,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
         full_name: payload.full_name,
         password: payload.password,
         phone_number: payload.phone_number,
-        role: payload.role ?? "investor",
+        role: payload.role ?? USER_ROLES.UTILISATEUR_SIMPLE,
       },
     });
 
@@ -182,8 +192,29 @@ export function AuthProvider({ children }: PropsWithChildren) {
       setToken(response.token);
       setUser(response.user);
     });
+    void prefetchRoute(getHomeRouteForRole(response.user.role), { token: response.token });
 
     return response.user;
+  }
+
+  async function updateProfile(payload: UpdateProfilePayload) {
+    if (!token) {
+      throw new Error("Connectez-vous avec un compte authentifie pour modifier votre profil.");
+    }
+
+    const updatedUser = await apiRequest<AuthUser>("/auth/me/", {
+      method: "PATCH",
+      body: payload,
+      token,
+    });
+
+    clearApiCache("/auth/me/");
+    clearApiCache("/users/");
+    startTransition(() => {
+      setUser(updatedUser);
+    });
+
+    return updatedUser;
   }
 
   function logout() {
@@ -204,6 +235,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
         logout,
         register,
         token,
+        updateProfile,
         user,
       }}
     >

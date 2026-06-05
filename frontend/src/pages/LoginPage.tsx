@@ -3,9 +3,11 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import ImportedPageDocument from "../components/ImportedPageDocument";
 import { getErrorMessage } from "../lib/api";
+import { getHomeRouteForRole } from "../lib/roles";
 import {
   APP_ROUTES,
   buildMailtoHref,
+  DEMO_ACCOUNTS,
   DEMO_CREDENTIALS,
   type LoginRedirectState,
 } from "../lib/smartestateApp";
@@ -40,7 +42,6 @@ export default function LoginPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const routeState = (location.state as LoginRedirectState | null) ?? null;
-  const redirectTo = routeState?.from ?? APP_ROUTES.dashboard;
 
   useEffect(() => {
     if (!routeState?.prefillDemo) {
@@ -59,12 +60,12 @@ export default function LoginPage() {
     setIsSubmitting(true);
 
     try {
-      await login({
+      const authenticatedUser = await login({
         email,
         password,
         remember,
       });
-      navigate(redirectTo, { replace: true });
+      navigate(routeState?.from ?? getHomeRouteForRole(authenticatedUser.role), { replace: true });
     } catch (submissionError) {
       setError(getErrorMessage(submissionError, "Connexion impossible pour le moment."));
     } finally {
@@ -79,10 +80,18 @@ export default function LoginPage() {
     setError(null);
   }
 
+  function fillRoleCredentials(account: keyof typeof DEMO_ACCOUNTS) {
+    const selectedAccount = DEMO_ACCOUNTS[account];
+    setEmail(selectedAccount.email);
+    setPassword(selectedAccount.password);
+    setHint(`${selectedAccount.label} prepare avec les identifiants demandes.`);
+    setError(null);
+  }
+
   return (
     <ImportedPageDocument
       bodyClassName="bg-surface font-body text-on-surface antialiased"
-      title="Acces Investisseur - SmartEstate"
+      title="Connexion SmartEstate"
       styles={pageStyles}
     >
       <div className="min-h-screen flex">
@@ -110,7 +119,7 @@ export default function LoginPage() {
             </div>
             <div className="flex gap-12">
               <div>
-                <p className="text-white font-headline text-2xl font-bold">2.4B MAD</p>
+                <p className="text-white font-headline text-2xl font-bold">2.4B DH</p>
                 <p className="text-on-primary-fixed-variant text-xs uppercase tracking-widest font-semibold mt-1">
                   Actifs analyses
                 </p>
@@ -138,10 +147,10 @@ export default function LoginPage() {
                 Espace securise
               </span>
               <h2 className="font-headline text-4xl font-extrabold text-on-surface tracking-tight mb-2">
-                Acces Investisseur
+                Connexion a votre espace
               </h2>
               <p className="text-on-surface-variant font-medium">
-                Veuillez renseigner vos identifiants pour acceder a votre console.
+                Veuillez renseigner vos identifiants pour acceder a votre interface SmartEstate.
               </p>
             </header>
 
@@ -274,6 +283,41 @@ export default function LoginPage() {
                 </svg>
                 LinkedIn
               </button>
+            </div>
+
+            <div className="mt-8 rounded-2xl border border-outline-variant/10 bg-white px-5 py-5">
+              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-on-surface-variant">
+                Acces rapide aux 3 interfaces
+              </p>
+              <p className="mt-2 text-sm text-on-surface-variant">
+                Mot de passe commun: <span className="font-bold text-primary">123456789</span>
+              </p>
+              <div className="mt-4 grid gap-3">
+                <button
+                  className="rounded-xl border border-outline-variant/10 bg-surface-container-low px-4 py-3 text-left transition-colors hover:bg-surface-container-high"
+                  type="button"
+                  onClick={() => fillRoleCredentials("user")}
+                >
+                  <span className="block text-sm font-bold text-primary">Interface 1 · Utilisateur simple</span>
+                  <span className="block text-xs text-on-surface-variant">{DEMO_ACCOUNTS.user.email}</span>
+                </button>
+                <button
+                  className="rounded-xl border border-outline-variant/10 bg-surface-container-low px-4 py-3 text-left transition-colors hover:bg-surface-container-high"
+                  type="button"
+                  onClick={() => fillRoleCredentials("agent")}
+                >
+                  <span className="block text-sm font-bold text-primary">Interface 2 · Agent immobilier</span>
+                  <span className="block text-xs text-on-surface-variant">{DEMO_ACCOUNTS.agent.email}</span>
+                </button>
+                <button
+                  className="rounded-xl border border-outline-variant/10 bg-surface-container-low px-4 py-3 text-left transition-colors hover:bg-surface-container-high"
+                  type="button"
+                  onClick={() => fillRoleCredentials("admin")}
+                >
+                  <span className="block text-sm font-bold text-primary">Interface 3 · Administrateur</span>
+                  <span className="block text-xs text-on-surface-variant">{DEMO_ACCOUNTS.admin.email}</span>
+                </button>
+              </div>
             </div>
 
             <footer className="mt-12 text-center">

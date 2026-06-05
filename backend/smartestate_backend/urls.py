@@ -6,7 +6,7 @@ from rest_framework.response import Response
 from rest_framework.routers import DefaultRouter
 from rest_framework.views import APIView
 
-from apps.accounts.views import CurrentUserView, LoginView, RegisterView
+from apps.accounts.views import CurrentUserView, LoginView, RegisterView, UserViewSet
 from apps.intelligence.views import (
     DashboardOverviewView,
     InvestmentScoreView,
@@ -19,8 +19,8 @@ from apps.intelligence.views import (
 )
 from apps.organizations.views import MembershipViewSet, OrganizationViewSet
 from apps.portfolios.views import PortfolioHoldingViewSet, PortfolioViewSet
-from apps.properties.views import MarketListingViewSet, PropertyAssetViewSet
-from smartestate_backend.health import check_cache, check_database, check_mongodb
+from apps.properties.views import MarketListingSyncView, MarketListingViewSet, PropertyAssetViewSet
+from smartestate_backend.health import check_cache, check_database
 
 
 class HealthcheckView(APIView):
@@ -30,15 +30,11 @@ class HealthcheckView(APIView):
     def get(self, request):
         database = check_database()
         cache = check_cache()
-        mongodb = check_mongodb()
 
         required_services = [database, cache]
         if any(service["status"] == "error" for service in required_services):
             overall_status = "error"
             response_status = status.HTTP_503_SERVICE_UNAVAILABLE
-        elif mongodb["status"] == "error":
-            overall_status = "degraded"
-            response_status = status.HTTP_200_OK
         else:
             overall_status = "ok"
             response_status = status.HTTP_200_OK
@@ -50,7 +46,6 @@ class HealthcheckView(APIView):
                 "services": {
                     "database": database,
                     "cache": cache,
-                    "mongodb": mongodb,
                 },
             },
             status=response_status,
@@ -58,6 +53,7 @@ class HealthcheckView(APIView):
 
 
 router = DefaultRouter()
+router.register("users", UserViewSet, basename="user")
 router.register("organizations", OrganizationViewSet, basename="organization")
 router.register("team-memberships", MembershipViewSet, basename="team-membership")
 router.register("assets", PropertyAssetViewSet, basename="asset")
@@ -77,6 +73,11 @@ urlpatterns = [
     path("api/auth/login/", LoginView.as_view(), name="auth-login"),
     path("api/auth/me/", CurrentUserView.as_view(), name="auth-me"),
     path("api/dashboard/overview/", DashboardOverviewView.as_view(), name="dashboard-overview"),
+    path(
+        "api/admin/market-listings/sync/",
+        MarketListingSyncView.as_view(),
+        name="admin-market-listings-sync",
+    ),
     path("api/ml/valuation/", MarketValuationView.as_view(), name="ml-valuation"),
     path("api/ml/investment-score/", InvestmentScoreView.as_view(), name="ml-investment-score"),
     path("api/ml/scenario-simulation/", ScenarioSimulationView.as_view(), name="ml-scenario-simulation"),

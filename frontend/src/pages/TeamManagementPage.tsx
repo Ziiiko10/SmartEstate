@@ -304,9 +304,6 @@ export default function TeamManagementPage() {
                   <div className="mb-6 flex items-center justify-between gap-4">
                     <div>
                       <h2 className="text-2xl font-headline font-bold text-primary">Annuaire collaboratif</h2>
-                      <p className="mt-1 text-sm text-on-surface-variant">
-                        Membres exposés par `GET /api/team-memberships/`.
-                      </p>
                     </div>
                     <span className="rounded-full bg-surface-container-low px-4 py-2 text-xs font-bold uppercase tracking-widest text-on-surface-variant">
                       {filteredMemberships.length} résultat{filteredMemberships.length > 1 ? "s" : ""}

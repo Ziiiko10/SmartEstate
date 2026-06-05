@@ -116,7 +116,7 @@ function formatMoney(value: ApiNumber | undefined, compact = false) {
 
   return `${amount.toLocaleString("fr-MA", {
     maximumFractionDigits: 0,
-  })} MAD`;
+  })} DH`;
 }
 
 function formatPercent(value: ApiNumber | undefined) {
@@ -396,7 +396,7 @@ export default function ScenarioSimulatorMarocPage() {
           projected_monthly_cashflow: toNumber(activeSimulation.projected_monthly_cashflow),
           renovation_budget: strategyPayload.renovation_budget,
           strategy: selectedStrategy,
-          title: `${strategyMeta[selectedStrategy].label} · ${strategyPayload.purchase_price.toLocaleString("fr-MA")} MAD`,
+          title: `${strategyMeta[selectedStrategy].label} · ${strategyPayload.purchase_price.toLocaleString("fr-MA")} DH`,
           down_payment: strategyPayload.down_payment,
         },
       });
@@ -490,25 +490,25 @@ export default function ScenarioSimulatorMarocPage() {
                   <Field
                     label="Prix d'achat"
                     onChange={(value) => updateField("purchase_price", value)}
-                    suffix="MAD"
+                    suffix="DH"
                     value={form.purchase_price}
                   />
                   <Field
                     label="Apport"
                     onChange={(value) => updateField("down_payment", value)}
-                    suffix="MAD"
+                    suffix="DH"
                     value={form.down_payment}
                   />
                   <Field
                     label="Loyer mensuel"
                     onChange={(value) => updateField("monthly_rent", value)}
-                    suffix="MAD"
+                    suffix="DH"
                     value={form.monthly_rent}
                   />
                   <Field
                     label="Budget travaux"
                     onChange={(value) => updateField("renovation_budget", value)}
-                    suffix="MAD"
+                    suffix="DH"
                     value={form.renovation_budget}
                   />
                   <Field
@@ -578,10 +578,6 @@ export default function ScenarioSimulatorMarocPage() {
                     value={formatMultiple(simulations[bestStrategy]?.equity_multiple)}
                   />
                 </div>
-
-                <p className="mt-6 text-xs uppercase tracking-widest text-primary-fixed-dim">
-                  Sauvegarde disponible vers `/api/scenarios/`
-                </p>
               </div>
             </section>
 

@@ -1,6 +1,8 @@
 from decimal import Decimal
 from types import SimpleNamespace
+from unittest.mock import patch
 
+from django.contrib.auth import get_user_model
 from django.test import SimpleTestCase, TestCase, override_settings
 from django.utils import timezone
 
@@ -13,7 +15,9 @@ from apps.intelligence.ml.algorithms import (
     simulate_investment_scenario,
 )
 from apps.intelligence.models import Valuation
+from apps.intelligence.views import DashboardOverviewView
 from apps.organizations.models import Organization
+from apps.organizations.models import Membership
 from apps.properties.models import MarketListing
 
 
@@ -244,3 +248,44 @@ class MarketValuationApiTests(TestCase):
         self.assertIsInstance(valuation.input_payload["models"], list)
         self.assertGreater(len(valuation.input_payload["models"]), 0)
         self.assertIsInstance(valuation.input_payload["models"][0]["estimated_value"], float)
+
+
+@override_settings(PUBLIC_DEMO_ACCESS=False)
+class DashboardOverviewApiTests(TestCase):
+    def setUp(self):
+        self.user_model = get_user_model()
+        self.agent = self.user_model.objects.create_user(
+            email="dashboard-agent@example.com",
+            full_name="Dashboard Agent",
+            phone_number="+212600009998",
+            password="motdepasse123",
+            role=self.user_model.Role.AGENT_IMMOBILIER,
+        )
+        self.organization = Organization.objects.create(name="Dashboard Agency", city="Casablanca")
+        Membership.objects.create(
+            organization=self.organization,
+            user=self.agent,
+            role=Membership.Role.MANAGER,
+            is_primary=True,
+        )
+        self.client.force_login(self.agent)
+
+    def test_dashboard_overview_skips_heavy_opportunities_by_default(self):
+        with patch.object(DashboardOverviewView, "_build_market_opportunities") as mocked_builder:
+            response = self.client.get("/api/dashboard/overview/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["opportunities"], [])
+        mocked_builder.assert_not_called()
+
+    def test_dashboard_overview_can_include_opportunities_on_demand(self):
+        with patch.object(
+            DashboardOverviewView,
+            "_build_market_opportunities",
+            return_value=[{"id": 1, "title": "Test Opportunity"}],
+        ) as mocked_builder:
+            response = self.client.get("/api/dashboard/overview/?include_opportunities=1")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["opportunities"], [{"id": 1, "title": "Test Opportunity"}])
+        mocked_builder.assert_called_once()

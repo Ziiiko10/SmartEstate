@@ -2,15 +2,19 @@ from decimal import Decimal, InvalidOperation
 
 from django.db.models import Count, Q
 from rest_framework.decorators import action
-from rest_framework import viewsets
+from rest_framework import permissions, status, viewsets
+from rest_framework.views import APIView
 from rest_framework.response import Response
 
+from apps.accounts.permissions import IsAdministrateur, IsAgentOrAdmin
 from smartestate_backend.access import visible_organizations
+from apps.properties.etl.pipeline import run_market_scrape
 from apps.properties.models import MarketListing, PropertyAsset
 from apps.properties.serializers import MarketListingSerializer, PropertyAssetSerializer
 
 
 class PropertyAssetViewSet(viewsets.ModelViewSet):
+    permission_classes = [IsAgentOrAdmin]
     serializer_class = PropertyAssetSerializer
 
     def get_queryset(self):
@@ -281,3 +285,87 @@ class MarketListingViewSet(viewsets.ReadOnlyModelViewSet):
         if maximum is not None:
             parsed = min(maximum, parsed)
         return parsed
+
+
+class MarketListingSyncView(APIView):
+    permission_classes = [IsAdministrateur]
+
+    def post(self, request):
+        source = request.data.get("source", "all")
+        pages = self._int_value(request.data.get("pages"), default=5, minimum=1, maximum=50)
+        limit = self._optional_int_value(request.data.get("limit"), minimum=1, maximum=500)
+        sleep_seconds = self._float_value(request.data.get("sleep"), default=0.5, minimum=0, maximum=5)
+        timeout = self._int_value(request.data.get("timeout"), default=20, minimum=5, maximum=60)
+        new_only = self._bool_value(request.data.get("new_only"), default=True)
+        stop_after_existing = self._int_value(
+            request.data.get("stop_after_existing"),
+            default=30,
+            minimum=1,
+            maximum=500,
+        )
+
+        if source not in {"all", "avito", "mubawab"}:
+            return Response(
+                {"source": "Source invalide. Utilisez all, avito ou mubawab."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        stats = run_market_scrape(
+            source=source,
+            pages=pages,
+            limit=limit,
+            sleep_seconds=sleep_seconds,
+            timeout=timeout,
+            new_only=new_only,
+            stop_after_existing=stop_after_existing,
+        )
+
+        return Response(
+            {
+                "stats": {
+                    "created": stats.created,
+                    "errors": stats.errors,
+                    "existing": stats.existing,
+                    "extracted": stats.extracted,
+                    "skipped": stats.skipped,
+                    "updated": stats.updated,
+                },
+                "total_market_listings": MarketListing.objects.count(),
+            }
+        )
+
+    def _bool_value(self, value, *, default):
+        if value is None:
+            return default
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str):
+            return value.strip().lower() in {"1", "true", "yes", "on"}
+        return bool(value)
+
+    def _float_value(self, value, *, default, minimum, maximum):
+        if value in (None, ""):
+            return default
+        try:
+            parsed = float(value)
+        except (TypeError, ValueError):
+            return default
+        return max(minimum, min(maximum, parsed))
+
+    def _int_value(self, value, *, default, minimum, maximum):
+        if value in (None, ""):
+            return default
+        try:
+            parsed = int(value)
+        except (TypeError, ValueError):
+            return default
+        return max(minimum, min(maximum, parsed))
+
+    def _optional_int_value(self, value, *, minimum, maximum):
+        if value in (None, ""):
+            return None
+        try:
+            parsed = int(value)
+        except (TypeError, ValueError):
+            return None
+        return max(minimum, min(maximum, parsed))

@@ -9,7 +9,6 @@ Backend Django REST pour l'application SmartEstate.
 - Token Authentication
 - PostgreSQL via `DATABASE_URL`
 - Redis pour le cache et les sessions
-- MongoDB optionnel pour les besoins documentaires et analytics
 
 ## Mode recommande
 
@@ -17,7 +16,6 @@ Le mode recommande pour ce projet est maintenant l'usage de bases de donnees man
 
 - PostgreSQL distant pour la base principale
 - Redis distant pour le cache, les sessions et Celery
-- MongoDB distant uniquement si vous avez un vrai besoin documentaire / analytics
 
 ## Installation
 
@@ -50,12 +48,17 @@ Le dossier `backend\venv` est un ancien environnement a ignorer. L'environnement
 
 Le frontend utilise son propre fichier [frontend/.env](D:\ENSMR\S4\Projet Fédérateur\App\frontend\.env).
 
-Par defaut, [backend/.env.example](D:\ENSMR\S4\Projet Fédérateur\App\backend\.env.example) est maintenant prepare pour des services manages.
+Par defaut:
+
+- [backend/.env.example](D:\ENSMR\S4\Projet Fédérateur\App\backend\.env.example) cible des services manages
+- [backend/.env.local.example](D:\ENSMR\S4\Projet Fédérateur\App\backend\.env.local.example) reste le mode local
 
 Vous avez aussi:
 
 - [backend/.env.managed.example](D:\ENSMR\S4\Projet Fédérateur\App\backend\.env.managed.example) pour les bases en ligne
 - [backend/.env.local.example](D:\ENSMR\S4\Projet Fédérateur\App\backend\.env.local.example) si vous voulez encore un mode local
+- [frontend/.env.managed.example](D:\ENSMR\S4\Projet Fédérateur\App\frontend\.env.managed.example) pour pointer le frontend vers une API distante
+- [/.env.managed.example](D:\ENSMR\S4\Projet Fédérateur\App\.env.managed.example) pour lancer Docker Compose directement contre des services en ligne
 
 ## Configuration cloud
 
@@ -64,11 +67,18 @@ Pour passer en bases en ligne:
 1. Copiez `backend/.env.managed.example` vers `backend/.env`
 2. Remplacez `DATABASE_URL` par votre PostgreSQL distant
 3. Remplacez `REDIS_URL` et `CELERY_BROKER_URL` par votre Redis distant
-4. Renseignez `MONGODB_URL` seulement si vous utilisez MongoDB
-5. Lancez `python manage.py migrate`
-6. Lancez `python manage.py seed_smartestate_demo` si vous voulez les donnees de demo
+4. Ajoutez vos vrais domaines dans `DJANGO_ALLOWED_HOSTS`, `DJANGO_CORS_ALLOWED_ORIGINS` et `DJANGO_CSRF_TRUSTED_ORIGINS`
+5. Copiez `frontend/.env.managed.example` vers `frontend/.env`, puis remplacez `VITE_API_BASE_URL` par l'URL publique de votre backend
+6. Lancez `python manage.py migrate`
+7. Lancez `python manage.py seed_smartestate_demo` si vous voulez les donnees de demo
 
 Quand `SMARTESTATE_USE_MANAGED_SERVICES=True`, Django attend des URLs distantes valides et n'utilise plus de fallback local.
+
+Pour l'equipe, le schema recommande est:
+
+- le backend se connecte aux services manages via `DATABASE_URL`, `REDIS_URL` et `CELERY_BROKER_URL`
+- l'equipe accede aux donnees via l'application ou l'API backend
+- si vous voulez un acces partage par cle, utilisez les tokens de l'API backend ou les credentials du fournisseur managé, pas un acces navigateur direct a la base
 
 ## Lancement Docker
 
@@ -85,20 +95,19 @@ Services exposes:
 - Backend: `http://127.0.0.1:8000`
 - PostgreSQL: `127.0.0.1:5432`
 - Redis: `127.0.0.1:6379`
-- MongoDB: `127.0.0.1:27017`
 
-Par defaut, `docker compose up` utilise les services `postgres`, `redis` et `mongodb` du compose.
+Par defaut, `docker compose up` utilise les services `postgres` et `redis` du compose.
 
-Si vous voulez garder Docker pour l'app mais utiliser des bases distantes, exportez vos variables cloud avant le lancement:
+Si vous voulez garder Docker pour l'app mais utiliser des bases distantes, partez de [/.env.managed.example](D:\ENSMR\S4\Projet Fédérateur\App\.env.managed.example) puis lancez uniquement l'application sans ses dependances locales:
 
 ```powershell
-$env:SMARTESTATE_USE_MANAGED_SERVICES="True"
-$env:DATABASE_URL="postgresql://USER:PASSWORD@HOST:5432/DBNAME?sslmode=require"
-$env:REDIS_URL="rediss://default:PASSWORD@HOST:PORT/0"
-$env:CELERY_BROKER_URL=$env:REDIS_URL
-$env:MONGODB_URL=""
-docker compose up --build
+cd ..
+copy .env.managed.example .env
+# editez .env avec vos vraies URLs distantes
+docker compose --env-file .env up --build --no-deps backend market-etl frontend
 ```
+
+`--no-deps` evite de demarrer `postgres` et `redis` locaux quand vous utilisez deja des services en ligne.
 
 ## Variables d'environnement
 
@@ -106,6 +115,7 @@ docker compose up --build
 - `DJANGO_DEBUG`
 - `DJANGO_ALLOWED_HOSTS`
 - `DJANGO_CORS_ALLOWED_ORIGINS`
+- `DJANGO_CSRF_TRUSTED_ORIGINS`
 - `SMARTESTATE_PUBLIC_DEMO_ACCESS`: `True` permet d'utiliser l'application sans login
 - `SMARTESTATE_USE_MANAGED_SERVICES`
 - `DATABASE_FALLBACK_TO_SQLITE`
@@ -113,8 +123,6 @@ docker compose up --build
 - `DATABASE_CONN_MAX_AGE`
 - `DATABASE_URL`
 - `REDIS_URL`
-- `MONGODB_URL`
-- `MONGODB_TIMEOUT_MS`
 - `CELERY_BROKER_URL`
 
 ## Health Check
@@ -123,9 +131,8 @@ docker compose up --build
 
 - la base de donnees
 - le cache Redis
-- MongoDB si configure
 
-Le endpoint retourne `200` si les services requis sont disponibles, `503` si PostgreSQL ou Redis sont indisponibles, et `200` avec statut `degraded` si MongoDB optionnel est configure mais injoignable.
+Le endpoint retourne `200` si les services requis sont disponibles, `503` si PostgreSQL ou Redis sont indisponibles.
 
 ## Endpoints principaux
 

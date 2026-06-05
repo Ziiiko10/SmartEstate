@@ -29,13 +29,26 @@ def env_bool(name: str, default: bool = False) -> bool:
     return value.lower() in {"1", "true", "yes", "on"}
 
 
+def env_list(name: str, default: str = "") -> list[str]:
+    raw_value = os.getenv(name, default)
+    return [item.strip() for item in raw_value.split(",") if item.strip()]
+
+
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "django-insecure-smartestate-dev-key")
 DEBUG = env_bool("DJANGO_DEBUG", True)
 MANAGED_SERVICES = env_bool("SMARTESTATE_USE_MANAGED_SERVICES", False)
-PUBLIC_DEMO_ACCESS = env_bool("SMARTESTATE_PUBLIC_DEMO_ACCESS", True)
+PUBLIC_DEMO_ACCESS = env_bool("SMARTESTATE_PUBLIC_DEMO_ACCESS", False)
 
-allowed_hosts = os.getenv("DJANGO_ALLOWED_HOSTS", "127.0.0.1,localhost")
-ALLOWED_HOSTS = [host.strip() for host in allowed_hosts.split(",") if host.strip()]
+DEFAULT_FRONTEND_ORIGINS = ",".join(
+    [
+        "http://127.0.0.1:5173",
+        "http://localhost:5173",
+        "http://127.0.0.1:4173",
+        "http://localhost:4173",
+    ]
+)
+
+ALLOWED_HOSTS = env_list("DJANGO_ALLOWED_HOSTS", "127.0.0.1,localhost")
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -156,23 +169,6 @@ else:
 SESSION_ENGINE = "django.contrib.sessions.backends.cached_db"
 SESSION_CACHE_ALIAS = "default"
 
-# Optional MongoDB client (expose as MONGO_CLIENT if provided)
-MONGODB_URL = os.getenv("MONGODB_URL")
-MONGODB_TIMEOUT_MS = int(os.getenv("MONGODB_TIMEOUT_MS", "5000"))
-if MONGODB_URL:
-    try:
-        import pymongo
-
-        MONGO_CLIENT = pymongo.MongoClient(
-            MONGODB_URL,
-            serverSelectionTimeoutMS=MONGODB_TIMEOUT_MS,
-            connectTimeoutMS=MONGODB_TIMEOUT_MS,
-        )
-    except Exception:
-        MONGO_CLIENT = None
-else:
-    MONGO_CLIENT = None
-
 # Celery broker: default to managed Redis when available
 CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", REDIS_URL or "")
 
@@ -215,11 +211,5 @@ REST_FRAMEWORK = {
 }
 
 CORS_ALLOW_ALL_ORIGINS = DEBUG
-CORS_ALLOWED_ORIGINS = [
-    origin.strip()
-    for origin in os.getenv(
-        "DJANGO_CORS_ALLOWED_ORIGINS",
-        "http://127.0.0.1:5173,http://localhost:5173",
-    ).split(",")
-    if origin.strip()
-]
+CORS_ALLOWED_ORIGINS = env_list("DJANGO_CORS_ALLOWED_ORIGINS", DEFAULT_FRONTEND_ORIGINS)
+CSRF_TRUSTED_ORIGINS = env_list("DJANGO_CSRF_TRUSTED_ORIGINS", ",".join(CORS_ALLOWED_ORIGINS))

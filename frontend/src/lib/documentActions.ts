@@ -5,12 +5,14 @@ import {
   SUPPORT_EMAIL,
   SUPPORT_PHONE,
 } from "./smartestateApp";
+import { getHomeRouteForRole } from "./roles";
 
 type DocumentActionContext = {
   currentPath: string;
   isAuthenticated: boolean;
   logout: () => void;
   navigate: NavigateFunction;
+  userRole?: string;
 };
 
 function normalizeText(value: null | string | undefined) {
@@ -113,13 +115,13 @@ async function shareCurrentPage() {
 
 function openDemo(context: DocumentActionContext) {
   if (context.isAuthenticated) {
-    context.navigate(APP_ROUTES.dashboard);
+    context.navigate(getHomeRouteForRole(context.userRole));
     return;
   }
 
   context.navigate(APP_ROUTES.login, {
     state: {
-      from: APP_ROUTES.dashboard,
+      from: APP_ROUTES.userEstimation,
       prefillDemo: true,
     },
   });
@@ -131,24 +133,24 @@ function matchesAny(label: string, values: string[]) {
 
 function goToRoute(label: string, icon: string, context: DocumentActionContext) {
   const routeMap = [
-    { match: ["tableau de bord"], route: APP_ROUTES.dashboard },
-    { match: ["portfolio", "gestion d'actifs", "gestion dactifs"], route: APP_ROUTES.portfolio },
-    { match: ["estimation", "estimateur ia"], route: APP_ROUTES.estimation },
-    { match: ["scenario", "scenarios"], route: APP_ROUTES.scenarios },
-    { match: ["recommandation", "recommandations"], route: APP_ROUTES.recommendations },
-    { match: ["rapport", "rapports", "analyses de marche"], route: APP_ROUTES.reports },
-    { match: ["equipe"], route: APP_ROUTES.team },
+    { match: ["tableau de bord"], route: getHomeRouteForRole(context.userRole) },
+    { match: ["estimation", "estimateur ia"], route: APP_ROUTES.userEstimation },
+    { match: ["annonces etl", "annonces du marche", "marche etl"], route: APP_ROUTES.marketListings },
+    { match: ["scenario", "scenarios", "simulation"], route: APP_ROUTES.userSimulation },
+    { match: ["recommandation", "recommandations"], route: APP_ROUTES.userRecommendations },
+    { match: ["historique", "rapport", "rapports"], route: APP_ROUTES.userHistory },
+    { match: ["equipe", "utilisateurs"], route: APP_ROUTES.adminUsers },
   ];
 
   const iconMap: Record<string, string> = {
-    auto_awesome: APP_ROUTES.recommendations,
-    calculate: APP_ROUTES.estimation,
-    dashboard: APP_ROUTES.dashboard,
-    description: APP_ROUTES.reports,
-    domain: APP_ROUTES.portfolio,
-    group: APP_ROUTES.team,
-    insights: APP_ROUTES.scenarios,
-    query_stats: APP_ROUTES.scenarios,
+    auto_awesome: APP_ROUTES.userRecommendations,
+    calculate: APP_ROUTES.userEstimation,
+    dashboard: getHomeRouteForRole(context.userRole),
+    description: APP_ROUTES.userHistory,
+    group: APP_ROUTES.adminUsers,
+    insights: APP_ROUTES.userSimulation,
+    travel_explore: APP_ROUTES.marketListings,
+    query_stats: APP_ROUTES.userSimulation,
   };
 
   for (const entry of routeMap) {
@@ -205,7 +207,7 @@ export function handleDocumentAction(trigger: HTMLElement, context: DocumentActi
       "creer un profil",
     ])
   ) {
-    context.navigate(context.isAuthenticated ? APP_ROUTES.dashboard : APP_ROUTES.signup);
+    context.navigate(context.isAuthenticated ? getHomeRouteForRole(context.userRole) : APP_ROUTES.signup);
     return true;
   }
 
@@ -242,24 +244,26 @@ export function handleDocumentAction(trigger: HTMLElement, context: DocumentActi
   }
 
   if (matchesAny(label, ["nouvelle analyse", "generer avec l'ia", "generer avec lia"])) {
-    context.navigate(APP_ROUTES.scenarios);
+    context.navigate(APP_ROUTES.userEstimation);
     return true;
   }
 
   if (matchesAny(label, ["inviter un membre"])) {
-    context.navigate(APP_ROUTES.team);
+    context.navigate(APP_ROUTES.adminUsers);
     return true;
   }
 
   if (
     matchesAny(label, [
       "voir tout le marche",
+      "toutes les annonces etl",
+      "annonces etl",
       "historique complet",
       "voir tout lhistorique",
       "dossier danalyse",
     ])
   ) {
-    context.navigate(APP_ROUTES.reports);
+    context.navigate(APP_ROUTES.marketListings);
     return true;
   }
 
@@ -317,12 +321,12 @@ export function handleDocumentAction(trigger: HTMLElement, context: DocumentActi
   }
 
   if (icon === "notifications") {
-    context.navigate(APP_ROUTES.reports);
+    context.navigate(APP_ROUTES.userHistory);
     return true;
   }
 
   if (icon === "settings") {
-    context.navigate(APP_ROUTES.team);
+    context.navigate(APP_ROUTES.adminSettings);
     return true;
   }
 
@@ -342,7 +346,7 @@ export function handleDocumentAction(trigger: HTMLElement, context: DocumentActi
   }
 
   if (icon === "visibility") {
-    context.navigate(APP_ROUTES.reports);
+    context.navigate(APP_ROUTES.userHistory);
     return true;
   }
 

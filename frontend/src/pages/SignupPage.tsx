@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import ImportedPageDocument from "../components/ImportedPageDocument";
 import { getErrorMessage } from "../lib/api";
+import { getHomeRouteForRole } from "../lib/roles";
 import { APP_ROUTES } from "../lib/smartestateApp";
 
 const pageStyles = `.material-symbols-outlined {
@@ -46,13 +47,13 @@ export default function SignupPage() {
     setIsSubmitting(true);
 
     try {
-      await register({
+      const registeredUser = await register({
         email,
         full_name: fullName,
         password,
         phone_number: `+212${phone.replace(/\s+/g, "")}`,
       });
-      navigate(APP_ROUTES.dashboard, { replace: true });
+      navigate(getHomeRouteForRole(registeredUser.role), { replace: true });
     } catch (submissionError) {
       setError(getErrorMessage(submissionError, "Inscription impossible pour le moment."));
     } finally {
@@ -84,7 +85,7 @@ export default function SignupPage() {
   return (
     <ImportedPageDocument
       bodyClassName="bg-background text-on-background font-body overflow-x-hidden"
-      title="Creer un profil investisseur | SmartEstate Morocco"
+      title="Creer un compte SmartEstate"
       styles={pageStyles}
     >
       <div className="flex min-h-screen w-full flex-col lg:flex-row">
@@ -158,10 +159,10 @@ export default function SignupPage() {
 
             <header className="mb-10">
               <h2 className="mb-3 font-headline text-3xl font-extrabold tracking-tight text-primary">
-                Creer un profil investisseur
+                Creer mon compte
               </h2>
               <p className="font-medium text-on-surface-variant">
-                Rejoignez le premier ecosysteme d&apos;investissement immobilier intelligent.
+                Rejoignez l&apos;ecosysteme immobilier intelligent SmartEstate.
               </p>
             </header>
 

@@ -1,4 +1,4 @@
-import { startTransition, useDeferredValue, useEffect, useMemo, useState } from "react";
+import { startTransition, useEffect, useMemo, useState } from "react";
 import ImportedPageDocument from "../components/ImportedPageDocument";
 import { DashboardPageLoader } from "../components/LoadingState";
 import { useAuth } from "../auth/AuthContext";
@@ -82,7 +82,7 @@ function formatMoney(value: number | string | null | undefined, compact = false)
 
   return `${amount.toLocaleString("fr-MA", {
     maximumFractionDigits: 0,
-  })} MAD`;
+  })} DH`;
 }
 
 function formatPercent(value: number | string | null | undefined) {
@@ -130,10 +130,8 @@ export default function PortfolioMarocPage() {
   const [dashboard, setDashboard] = useState<DashboardOverview>(emptyOverview);
   const [holdings, setHoldings] = useState<Holding[]>([]);
   const [portfolios, setPortfolios] = useState<Portfolio[]>([]);
-  const [query, setQuery] = useState("");
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(true);
-  const deferredQuery = useDeferredValue(query.trim().toLowerCase());
 
   useEffect(() => {
     let active = true;
@@ -178,21 +176,6 @@ export default function PortfolioMarocPage() {
       active = false;
     };
   }, [token]);
-
-  const filteredAssets = useMemo(
-    () =>
-      assets.filter((asset) => {
-        if (!deferredQuery) {
-          return true;
-        }
-
-        return [asset.name, asset.city, asset.district, assetTypeLabel(asset.asset_type)]
-          .join(" ")
-          .toLowerCase()
-          .includes(deferredQuery);
-      }),
-    [assets, deferredQuery],
-  );
 
   const holdingsByAssetId = useMemo(
     () => new Map(holdings.map((holding) => [holding.asset, holding])),
@@ -256,27 +239,6 @@ export default function PortfolioMarocPage() {
             </div>
           ) : (
             <>
-          <header className="flex justify-between items-center px-8 py-4 w-full sticky top-0 bg-[#f9f9fb]/80 backdrop-blur-md z-40">
-            <div className="flex items-center gap-4">
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 material-symbols-outlined text-outline">search</span>
-                <input
-                  className="pl-10 pr-4 py-2 bg-surface-container-low border-none rounded-full w-80 focus:ring-2 focus:ring-secondary/20 font-body text-sm"
-                  onChange={(event) => setQuery(event.target.value)}
-                  placeholder="Rechercher un actif ou une annonce..."
-                  type="text"
-                  value={query}
-                />
-              </div>
-            </div>
-            <div className="flex items-center gap-6">
-              <div className="text-right">
-                <p className="text-xs font-bold text-primary">Mode Donnees Live</p>
-                <p className="text-[10px] text-on-surface-variant">Frontend branche sur PostgreSQL + ETL</p>
-              </div>
-            </div>
-          </header>
-
           <section className="px-12 py-10">
             <div className="flex justify-between items-end mb-10 gap-8">
               <div className="max-w-2xl">
@@ -345,10 +307,10 @@ export default function PortfolioMarocPage() {
                   value={formatPercent(dashboard.average_occupancy_rate)}
                 />
                 <div className="bg-surface-container-lowest p-6 rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.03)]">
-                  <p className="text-on-surface-variant text-xs font-bold uppercase tracking-tighter block mb-2">Recherche active</p>
-                  <p className="text-3xl font-headline font-bold text-on-surface">{deferredQuery ? filteredAssets.length : assets.length}</p>
+                  <p className="text-on-surface-variant text-xs font-bold uppercase tracking-tighter block mb-2">Actifs visibles</p>
+                  <p className="text-3xl font-headline font-bold text-on-surface">{assets.length}</p>
                   <p className="mt-2 text-sm text-on-surface-variant">
-                    {deferredQuery ? `Actifs filtres par "${query}"` : "Actifs disponibles sans filtre"}
+                    Inventaire charge depuis la base de donnees.
                   </p>
                 </div>
               </div>
@@ -359,21 +321,20 @@ export default function PortfolioMarocPage() {
             <div className="flex items-center justify-between mb-8">
               <div>
                 <h3 className="text-2xl font-headline font-bold text-primary">Actifs depuis la base</h3>
-                <p className="mt-2 text-sm text-on-surface-variant">Les cartes ci-dessous viennent directement de `GET /api/assets/` et `GET /api/holdings/`.</p>
               </div>
               <div className="flex gap-4 text-xs font-bold text-on-surface-variant">
-                <span className="rounded-full bg-white px-4 py-2 shadow-sm">{filteredAssets.length} visibles</span>
+                <span className="rounded-full bg-white px-4 py-2 shadow-sm">{assets.length} visibles</span>
                 <span className="rounded-full bg-white px-4 py-2 shadow-sm">{portfolios.length} portefeuilles</span>
               </div>
             </div>
 
             {isLoading ? (
               <div className="rounded-xl bg-white p-8 text-sm font-semibold text-on-surface-variant shadow-sm">Chargement des donnees depuis le backend...</div>
-            ) : filteredAssets.length === 0 ? (
-              <div className="rounded-xl bg-white p-8 text-sm font-semibold text-on-surface-variant shadow-sm">Aucun actif ne correspond au filtre actuel.</div>
+            ) : assets.length === 0 ? (
+              <div className="rounded-xl bg-white p-8 text-sm font-semibold text-on-surface-variant shadow-sm">Aucun actif disponible pour le moment.</div>
             ) : (
               <div className="grid grid-cols-1 gap-6">
-                {filteredAssets.map((asset) => {
+                {assets.map((asset) => {
                   const holding = holdingsByAssetId.get(asset.id);
                   return (
                     <article className="group bg-surface-container-lowest rounded-xl p-5 flex gap-8 items-start hover:shadow-[0_12px_32px_rgba(0,0,0,0.06)] transition-all duration-300" key={asset.id}>

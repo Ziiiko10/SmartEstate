@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
 import ImportedPageDocument from "../components/ImportedPageDocument";
 import { CardGridSkeleton, MetricCardsSkeleton, SkeletonBlock } from "../components/LoadingState";
 import { useAuth } from "../auth/AuthContext";
@@ -121,7 +120,7 @@ function formatMoney(value: number | string | null | undefined, compact = false)
 
   return `${amount.toLocaleString("fr-MA", {
     maximumFractionDigits: 0,
-  })} MAD`;
+  })} DH`;
 }
 
 function relativeDate(value: string) {
@@ -344,18 +343,7 @@ export default function MarketListingsPage() {
               <h1 className="text-4xl md:text-5xl font-headline font-extrabold text-primary tracking-tight leading-tight">
                 Toutes les annonces ETL
               </h1>
-              <p className="mt-3 text-on-surface-variant text-sm md:text-base leading-relaxed">
-                Cette page interroge maintenant le backend avec pagination et filtres serveur pour afficher les
-                annonces récupérées par l&apos;ETL Avito et Mubawab, avec leurs images et métadonnées.
-              </p>
             </div>
-            <Link
-              className="inline-flex items-center gap-2 rounded-lg bg-primary px-5 py-3 text-sm font-bold text-white shadow-sm"
-              to="/portfolio-immobilier-maroc"
-            >
-              <span className="material-symbols-outlined text-base">arrow_back</span>
-              Retour portfolio
-            </Link>
           </div>
         </section>
 

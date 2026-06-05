@@ -56,30 +56,3 @@ def check_cache() -> dict[str, object]:
         }
     except Exception as exc:
         return {"status": "error", "detail": str(exc)}
-
-
-def check_mongodb() -> dict[str, object]:
-    mongo_client = getattr(settings, "MONGO_CLIENT", None)
-    mongodb_url = getattr(settings, "MONGODB_URL", None)
-
-    if not mongodb_url:
-        return {"status": "not_configured", "optional": True}
-
-    if mongo_client is None:
-        return {
-            "status": "error",
-            "optional": True,
-            "detail": "Le client MongoDB n'a pas pu etre initialise.",
-            "location": _redact_url(mongodb_url),
-        }
-
-    try:
-        mongo_client.admin.command("ping")
-        return {"status": "ok", "optional": True, "location": _redact_url(mongodb_url)}
-    except Exception as exc:
-        return {
-            "status": "error",
-            "optional": True,
-            "detail": str(exc),
-            "location": _redact_url(mongodb_url),
-        }

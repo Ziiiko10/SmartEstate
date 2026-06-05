@@ -1,12 +1,14 @@
 from django.db.models import Count
 from rest_framework import viewsets
 
+from apps.accounts.permissions import IsAdministrateur
 from smartestate_backend.access import visible_organizations
 from apps.organizations.models import Membership, Organization
 from apps.organizations.serializers import MembershipSerializer, OrganizationSerializer
 
 
 class OrganizationViewSet(viewsets.ModelViewSet):
+    permission_classes = [IsAdministrateur]
     serializer_class = OrganizationSerializer
 
     def get_queryset(self):
@@ -20,6 +22,7 @@ class OrganizationViewSet(viewsets.ModelViewSet):
 
 
 class MembershipViewSet(viewsets.ModelViewSet):
+    permission_classes = [IsAdministrateur]
     serializer_class = MembershipSerializer
 
     def get_queryset(self):

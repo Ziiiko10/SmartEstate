@@ -25,17 +25,15 @@ class UserManager(BaseUserManager):
     def create_superuser(self, email, password, **extra_fields):
         extra_fields.setdefault("is_staff", True)
         extra_fields.setdefault("is_superuser", True)
-        extra_fields.setdefault("role", User.Role.ADMIN)
+        extra_fields.setdefault("role", User.Role.ADMINISTRATEUR)
         return self._create_user(email, password, **extra_fields)
 
 
 class User(AbstractUser, TimestampedModel):
     class Role(models.TextChoices):
-        ADMIN = "admin", "Administrateur"
-        INVESTOR = "investor", "Investisseur"
-        ANALYST = "analyst", "Analyste"
-        ASSET_MANAGER = "asset_manager", "Asset Manager"
-        EXECUTIVE = "executive", "Executive"
+        UTILISATEUR_SIMPLE = "UTILISATEUR_SIMPLE", "Utilisateur simple"
+        AGENT_IMMOBILIER = "AGENT_IMMOBILIER", "Agent immobilier"
+        ADMINISTRATEUR = "ADMINISTRATEUR", "Administrateur"
 
     username = None
     first_name = None
@@ -44,7 +42,11 @@ class User(AbstractUser, TimestampedModel):
     email = models.EmailField(unique=True)
     full_name = models.CharField(max_length=255)
     phone_number = models.CharField(max_length=32, blank=True)
-    role = models.CharField(max_length=32, choices=Role.choices, default=Role.INVESTOR)
+    role = models.CharField(
+        max_length=32,
+        choices=Role.choices,
+        default=Role.UTILISATEUR_SIMPLE,
+    )
 
     USERNAME_FIELD = "email"
     REQUIRED_FIELDS = []
