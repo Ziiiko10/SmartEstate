@@ -1,3 +1,4 @@
+// Routeur principal: relie les ecrans publics et les espaces proteges selon le role.
 import { Suspense } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { useAuth } from "./auth/AuthContext";
@@ -11,12 +12,10 @@ import {
   LazyAdminLocationsPage,
   LazyAdminMlModelPage,
   LazyAdminSettingsPage,
-  LazyAdminStatisticsPage,
   LazyAdminUsersPage,
   LazyAgentClientRequestsPage,
   LazyAgentListingCreatePage,
   LazyAgentListingsPage,
-  LazyAgentStatisticsPage,
   LazyAiEstimationPage,
   LazyAiRecommendationsPage,
   LazyExecutiveDashboardPage,
@@ -33,11 +32,15 @@ import { getHomeRouteForRole, USER_ROLES } from "./lib/roles";
 import { APP_ROUTES } from "./lib/smartestateApp";
 
 function RoleHomeRedirect() {
+  // Redirige l'utilisateur vers sa page d'accueil selon son role courant.
+  // Ce helper evite de dupliquer cette logique dans plusieurs routes legacy.
   const { user } = useAuth();
   return <Navigate replace to={getHomeRouteForRole(user?.role)} />;
 }
 
 function EstimationAliasRedirect() {
+  // Redirige l'alias d'estimation vers l'ecran adapte au role connecte.
+  // Les agents ouvrent la version pro, les autres la version utilisateur.
   const { user } = useAuth();
   return (
     <Navigate
@@ -48,6 +51,8 @@ function EstimationAliasRedirect() {
 }
 
 export default function App() {
+  // Defini l'ensemble du routage principal de l'application.
+  // Les routes publiques, protegees et legacy sont centralisees dans ce composant.
   return (
     <>
       <RouteTransitionOverlay />
@@ -171,7 +176,7 @@ export default function App() {
             path={APP_ROUTES.agentStats}
             element={
               <ProtectedRoute allowedRoles={[USER_ROLES.AGENT_IMMOBILIER]}>
-                <LazyAgentStatisticsPage />
+                <Navigate replace to={APP_ROUTES.agentDashboard} />
               </ProtectedRoute>
             }
           />
@@ -244,7 +249,7 @@ export default function App() {
             path={APP_ROUTES.adminStats}
             element={
               <ProtectedRoute allowedRoles={[USER_ROLES.ADMINISTRATEUR]}>
-                <LazyAdminStatisticsPage />
+                <Navigate replace to={APP_ROUTES.adminDashboard} />
               </ProtectedRoute>
             }
           />
@@ -325,7 +330,7 @@ export default function App() {
             path={APP_ROUTES.legacyReports}
             element={
               <ProtectedRoute>
-                <Navigate replace to={APP_ROUTES.adminStats} />
+                <RoleHomeRedirect />
               </ProtectedRoute>
             }
           />

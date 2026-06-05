@@ -1,3 +1,4 @@
+# API des annonces et points de synchronisation de l'ETL immobilier.
 from decimal import Decimal, InvalidOperation
 
 from django.db.models import Count, Q
@@ -14,10 +15,14 @@ from apps.properties.serializers import MarketListingSerializer, PropertyAssetSe
 
 
 class PropertyAssetViewSet(viewsets.ModelViewSet):
+    # Expose le CRUD des actifs immobiliers visibles par l'utilisateur courant.
+    # La vue applique ensuite quelques filtres simples transmis par query params.
     permission_classes = [IsAgentOrAdmin]
     serializer_class = PropertyAssetSerializer
 
     def get_queryset(self):
+        # Retourne les actifs des organisations visibles avec prechargement minimal.
+        # Des filtres facultatifs sur la ville, le type et le statut sont ensuite appliques.
         queryset = PropertyAsset.objects.filter(
             organization__in=visible_organizations(self.request.user)
         ).select_related("organization").only(
@@ -61,9 +66,13 @@ class PropertyAssetViewSet(viewsets.ModelViewSet):
 
 
 class MarketListingViewSet(viewsets.ReadOnlyModelViewSet):
+    # Expose les annonces de marche en lecture seule pour le frontend et l'analyse.
+    # La vue gere aussi les filtres, les facettes et une pagination legere maison.
     serializer_class = MarketListingSerializer
 
     def _base_queryset(self):
+        # Prepare le queryset de base des annonces avant filtrage.
+        # Les champs charges sont limites a ceux vraiment utiles a l'API publique.
         return MarketListing.objects.only(
             "id",
             "source",
@@ -90,6 +99,8 @@ class MarketListingViewSet(viewsets.ReadOnlyModelViewSet):
         ).order_by("-last_seen_at", "-id")
 
     def _apply_filters(self, queryset, *, include_city=True, include_query=True):
+        # Applique les filtres recuperees depuis les query params sur le queryset.
+        # La methode couvre source, localisation, type, transaction et bornes de prix.
         source = self.request.query_params.get("source")
         city = self.request.query_params.get("city")
         asset_type = self.request.query_params.get("asset_type")
@@ -122,10 +133,14 @@ class MarketListingViewSet(viewsets.ReadOnlyModelViewSet):
         return queryset
 
     def get_queryset(self):
+        # Retourne le queryset final des annonces pour la requete courante.
+        # Toute la logique de filtrage reutilise le helper central de la vue.
         return self._apply_filters(self._base_queryset())
 
     @action(detail=False, methods=["get"], url_path="filters")
     def filters(self, request, *args, **kwargs):
+        # Construit les facettes de recherche utilisables par le frontend.
+        # Les compteurs sont calcules apres application des filtres contextuels pertinents.
         queryset = self._apply_filters(self._base_queryset(), include_query=False)
         city_queryset = self._apply_filters(
             self._base_queryset(),
@@ -227,6 +242,8 @@ class MarketListingViewSet(viewsets.ReadOnlyModelViewSet):
         )
 
     def list(self, request, *args, **kwargs):
+        # Retourne les annonces avec prise en charge d'un mode page ou limit/offset.
+        # La reponse garde un format simple pour rester compatible avec le frontend actuel.
         queryset = self.filter_queryset(self.get_queryset())
 
         page = self._int_query_param("page", minimum=1)
@@ -263,6 +280,8 @@ class MarketListingViewSet(viewsets.ReadOnlyModelViewSet):
         return Response(serializer.data)
 
     def _decimal_query_param(self, name):
+        # Convertit un parametre decimal de la requete en Decimal exploitable.
+        # Une valeur vide ou invalide retombe silencieusement sur None.
         value = self.request.query_params.get(name)
         if not value:
             return None
@@ -272,6 +291,8 @@ class MarketListingViewSet(viewsets.ReadOnlyModelViewSet):
             return None
 
     def _int_query_param(self, name, *, minimum=None, maximum=None):
+        # Convertit un parametre entier en respectant d'eventuelles bornes.
+        # Cela securise la pagination et les limites d'affichage recues de l'API.
         value = self.request.query_params.get(name)
         if value in (None, ""):
             return None
@@ -288,9 +309,13 @@ class MarketListingViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class MarketListingSyncView(APIView):
+    # Expose un endpoint admin pour lancer le scraping et la synchronisation ETL.
+    # La vue traduit un payload HTTP en parametres exploitables par le pipeline.
     permission_classes = [IsAdministrateur]
 
     def post(self, request):
+        # Lance un cycle de synchronisation ETL avec validation defensive des options.
+        # La reponse retourne ensuite les statistiques utiles au pilotage de l'import.
         source = request.data.get("source", "all")
         pages = self._int_value(request.data.get("pages"), default=5, minimum=1, maximum=50)
         limit = self._optional_int_value(request.data.get("limit"), minimum=1, maximum=500)
@@ -335,6 +360,8 @@ class MarketListingSyncView(APIView):
         )
 
     def _bool_value(self, value, *, default):
+        # Convertit une valeur libre en booleen avec gestion des cas courants.
+        # Le helper accepte aussi bien des bool natifs que des chaines textuelles.
         if value is None:
             return default
         if isinstance(value, bool):
@@ -344,6 +371,8 @@ class MarketListingSyncView(APIView):
         return bool(value)
 
     def _float_value(self, value, *, default, minimum, maximum):
+        # Convertit une entree libre en float borne par un minimum et un maximum.
+        # Les valeurs invalides retombent sur le defaut prevu par l'endpoint.
         if value in (None, ""):
             return default
         try:
@@ -353,6 +382,8 @@ class MarketListingSyncView(APIView):
         return max(minimum, min(maximum, parsed))
 
     def _int_value(self, value, *, default, minimum, maximum):
+        # Convertit une entree libre en entier borne.
+        # Ce helper est utilise pour proteger pages, timeouts et autres limites ETL.
         if value in (None, ""):
             return default
         try:
@@ -362,6 +393,8 @@ class MarketListingSyncView(APIView):
         return max(minimum, min(maximum, parsed))
 
     def _optional_int_value(self, value, *, minimum, maximum):
+        # Convertit une valeur optionnelle en entier borne si elle existe.
+        # Le helper renvoie None quand l'appelant n'a rien fourni de valable.
         if value in (None, ""):
             return None
         try:

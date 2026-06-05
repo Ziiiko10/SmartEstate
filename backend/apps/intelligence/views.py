@@ -1,3 +1,4 @@
+# API d'analyse immobiliere: dashboards, estimations, recommandations et rapports.
 from datetime import datetime, timedelta
 from decimal import Decimal
 
@@ -33,18 +34,24 @@ from apps.properties.models import MarketListing, PropertyAsset
 
 
 def decimal_to_float(value):
+    # Convertit un Decimal optionnel en float JSON compatible.
+    # Le helper renvoie aussi None quand aucune valeur n'est disponible.
     if value is None:
         return None
     return float(value)
 
 
 def money_to_float(value):
+    # Convertit un montant optionnel en float exploitable par le frontend.
+    # Une valeur absente retombe sur 0 pour simplifier certains KPIs dashboard.
     if value is None:
         return 0
     return float(value)
 
 
 def json_safe(value):
+    # Rend une structure Python compatible avec une serialisation JSON native.
+    # Les Decimal imbriques sont convertis recursivement en types simples.
     if isinstance(value, Decimal):
         return float(value)
     if isinstance(value, dict):
@@ -55,29 +62,41 @@ def json_safe(value):
 
 
 class ScenarioViewSet(viewsets.ModelViewSet):
+    # Expose le CRUD des scenarios visibles pour l'utilisateur courant.
+    # La vue charge aussi l'organisation et l'actif pour simplifier les details.
     permission_classes = [IsAgentOrAdmin]
     serializer_class = ScenarioSerializer
 
     def get_queryset(self):
+        # Retourne les scenarios rattaches aux organisations visibles.
+        # Le select_related evite des acces supplementaires sur les relations principales.
         return Scenario.objects.filter(
             organization__in=visible_organizations(self.request.user)
         ).select_related("organization", "asset")
 
 
 class ValuationViewSet(viewsets.ModelViewSet):
+    # Expose le CRUD des estimations sauvegardees.
+    # Les relations utiles a l'affichage sont prechargees dans le queryset.
     permission_classes = [IsAgentOrAdmin]
     serializer_class = ValuationSerializer
 
     def get_queryset(self):
+        # Retourne les estimations visibles pour l'utilisateur courant.
+        # Les objets lies sont joints des la requete pour accelerer l'API.
         return Valuation.objects.filter(
             organization__in=visible_organizations(self.request.user)
         ).select_related("organization", "asset", "requested_by")
 
 
 class RecommendationViewSet(viewsets.ModelViewSet):
+    # Expose les recommandations analysees pour les organisations visibles.
+    # Le viewset permet aussi de filtrer rapidement par statut cote frontend.
     serializer_class = RecommendationSerializer
 
     def get_queryset(self):
+        # Retourne les recommandations accessibles et applique le filtre de statut si present.
+        # La requete reste liee au perimetre d'organisations visibles pour l'utilisateur.
         queryset = Recommendation.objects.filter(
             organization__in=visible_organizations(self.request.user)
         ).select_related("organization", "asset")
@@ -88,17 +107,25 @@ class RecommendationViewSet(viewsets.ModelViewSet):
 
 
 class ReportViewSet(viewsets.ModelViewSet):
+    # Expose le CRUD des rapports generes par la plateforme.
+    # Les relations portefeuille, actif et auteur sont prechargees pour l'affichage.
     permission_classes = [IsAgentOrAdmin]
     serializer_class = ReportSerializer
 
     def get_queryset(self):
+        # Retourne les rapports visibles dans le perimetre de l'utilisateur.
+        # Les objets lies sont resolus en amont pour limiter les aller-retours SQL.
         return Report.objects.filter(
             organization__in=visible_organizations(self.request.user)
         ).select_related("organization", "asset", "portfolio", "generated_by")
 
 
 class DashboardOverviewView(APIView):
+    # Construit la vue d'ensemble du dashboard SmartEstate.
+    # Cet endpoint agrege KPIs, listes recentes, alertes et signaux de marche.
     def get(self, request):
+        # Assemble toutes les donnees du dashboard a partir du perimetre visible.
+        # Certaines sections lourdes, comme les opportunites, restent optionnelles.
         organizations = visible_organizations(request.user)
         now = timezone.now()
         include_opportunities = request.query_params.get("include_opportunities", "").lower() in {
@@ -314,6 +341,8 @@ class DashboardOverviewView(APIView):
         return Response(payload)
 
     def _build_choice_breakdown(self, queryset, field_name, choices):
+        # Construit un comptage par valeur pour un champ a choix.
+        # Le resultat expose a la fois la cle brute, le libelle et le volume associe.
         breakdown = []
         for item in (
             queryset.values(field_name)
@@ -337,6 +366,8 @@ class DashboardOverviewView(APIView):
         return breakdown
 
     def _count_distinct_locations(self, assets, market_listings, field_name):
+        # Compte le nombre de villes ou quartiers distincts entre actifs et marche.
+        # La fusion en memoire permet d'eviter les doublons entre sources.
         values = set()
         for value in assets.exclude(**{field_name: ""}).values_list(field_name, flat=True):
             normalized = (value or "").strip()
@@ -349,6 +380,8 @@ class DashboardOverviewView(APIView):
         return len(values)
 
     def _organization_contact_map(self, memberships):
+        # Prepare un contact prioritaire par organisation a partir des memberships.
+        # Le manager l'emporte sur owner, puis analyst et viewer si besoin.
         contacts = {}
         priority_map = {
             Membership.Role.MANAGER: 0,
@@ -370,6 +403,8 @@ class DashboardOverviewView(APIView):
         return contacts
 
     def _build_pending_agents(self, users, memberships):
+        # Construit la liste des agents inactifs en attente de validation.
+        # Les informations d'agence sont deduites des memberships disponibles.
         agency_map = {}
         for membership in memberships:
             agency_map.setdefault(
@@ -398,6 +433,8 @@ class DashboardOverviewView(APIView):
         return pending_agents
 
     def _build_pending_listings(self, assets, memberships):
+        # Construit la liste des actifs pipeline a traiter en priorite.
+        # Chaque carte est enrichie avec le meilleur contact connu de l'organisation.
         contacts = self._organization_contact_map(memberships)
         pending_assets = []
         for asset in assets.filter(status=PropertyAsset.Status.PIPELINE).order_by("-created_at")[:6]:
@@ -418,6 +455,8 @@ class DashboardOverviewView(APIView):
         return pending_assets
 
     def _build_market_districts(self, market_listings):
+        # Retourne les quartiers de marche les plus representes dans les annonces ETL.
+        # Cette vue sert surtout aux cartes et tableaux synthetiques du dashboard.
         return list(
             market_listings.exclude(district="")
             .values("district")
@@ -426,6 +465,8 @@ class DashboardOverviewView(APIView):
         )
 
     def _build_valuations_by_city(self, valuations):
+        # Regroupe les estimations sauvegardees par ville.
+        # La ville est cherchee d'abord sur l'actif, puis dans le payload d'entree.
         city_counts = {}
         for valuation in valuations.select_related("asset"):
             city = ""
@@ -446,6 +487,8 @@ class DashboardOverviewView(APIView):
         ]
 
     def _build_recent_assets(self, assets):
+        # Formate les derniers actifs crees pour l'affichage dashboard.
+        # Le payload retourne un resume simple avec prix, statut et localisation.
         recent_assets = []
         for asset in assets.order_by("-created_at")[:6]:
             recent_assets.append(
@@ -463,6 +506,8 @@ class DashboardOverviewView(APIView):
         return recent_assets
 
     def _build_recent_valuations(self, valuations):
+        # Formate les dernieres estimations sauvegardees pour le dashboard.
+        # La methode calcule aussi l'ecart relatif quand un prix demande est disponible.
         recent_items = []
         for valuation in valuations.select_related("asset").order_by("-created_at")[:6]:
             features = valuation.input_payload.get("features", {}) if isinstance(valuation.input_payload, dict) else {}
@@ -505,6 +550,8 @@ class DashboardOverviewView(APIView):
         return recent_items
 
     def _build_model_state(self, valuations, sale_market_listings):
+        # Construit un resume de l'etat percu du modele de valorisation.
+        # La plateforme s'appuie surtout ici sur la derniere valuation et la taille du dataset.
         latest_valuation = valuations.order_by("-created_at").first()
         dataset_size = sale_market_listings.count()
         return {
@@ -527,6 +574,8 @@ class DashboardOverviewView(APIView):
         }
 
     def _build_alerts(self, users, market_listings, sale_market_listings, model_state):
+        # Construit les alertes de supervision a partir des donnees actuelles.
+        # Les signaux couvrent prix suspects, champs manquants, comptes bloques et modele ML.
         city_averages = {
             item["city"]: item["average_price"]
             for item in sale_market_listings.exclude(city="")
@@ -579,6 +628,8 @@ class DashboardOverviewView(APIView):
         ]
 
     def _build_notifications(self, pending_listings, recent_valuations, recent_assets):
+        # Construit un flux compact de notifications recentes pour le dashboard.
+        # Les elements sont fusionnes puis tries par horodatage descendant.
         notifications = []
         for listing in pending_listings[:2]:
             notifications.append(
@@ -610,6 +661,8 @@ class DashboardOverviewView(APIView):
         return notifications[:6]
 
     def _build_market_opportunities(self, market_listings):
+        # Evalue quelques annonces recentes pour detecter des opportunites d'achat.
+        # Chaque candidat est note via estimation de marche puis scoring d'investissement.
         candidates = (
             market_listings.filter(
                 transaction_type=MarketListing.TransactionType.SALE,
@@ -671,6 +724,8 @@ class DashboardOverviewView(APIView):
         return opportunities[:4]
 
     def _average_price_per_sqm(self, listings):
+        # Calcule un prix moyen au metre carre sur un echantillon d'annonces.
+        # Le helper ignore les lignes sans prix ou sans surface exploitable.
         values = []
         for listing in listings[:200]:
             if listing.price and listing.area_sqm and listing.area_sqm > 0:
@@ -688,6 +743,8 @@ class DashboardOverviewView(APIView):
         pending_agents,
         model_state,
     ):
+        # Construit un journal d'activite recent a partir des objets metier principaux.
+        # Les evenements de nature differente sont fusionnes puis tries par date.
         activities = []
         for user in users.exclude(
             role=User.Role.AGENT_IMMOBILIER,
@@ -756,6 +813,8 @@ class DashboardOverviewView(APIView):
         return activities[:6]
 
     def _build_activity_series(self, users, assets, valuations, market_listings, *, is_admin):
+        # Construit la serie journaliere des activites recentes du dashboard.
+        # Les comptes utilisateurs ne sont comptes que pour les administrateurs.
         today = timezone.localdate()
         days = [today - timedelta(days=offset) for offset in range(6, -1, -1)]
         chart = {
@@ -809,6 +868,8 @@ class DashboardOverviewView(APIView):
         ]
 
     def _build_growth_series(self, total_acquisition, total_value):
+        # Simule une courbe simple d'evolution entre valeur d'acquisition et valeur actuelle.
+        # Cette serie alimente le widget visuel quand aucun historique fin n'est disponible.
         labels = ["Jan", "Fev", "Mar", "Avr", "Mai", "Juin", "Juil", "Aout", "Sep", "Oct", "Nov", "Dec"]
         start = total_acquisition if total_acquisition > 0 else total_value
         end = total_value if total_value > 0 else start
@@ -833,7 +894,11 @@ class DashboardOverviewView(APIView):
 
 
 class MarketValuationView(APIView):
+    # Expose l'endpoint d'estimation de valeur de marche.
+    # La vue peut aussi sauvegarder la valuation produite si le client le demande.
     def post(self, request):
+        # Valide les features du bien puis produit une estimation via le moteur ML.
+        # Si besoin, la valuation est egalement persistee en base avant reponse.
         serializer = MarketValuationInputSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         payload = serializer.validated_data
@@ -853,6 +918,8 @@ class MarketValuationView(APIView):
         return Response(result)
 
     def _base_market_queryset(self, transaction_type):
+        # Prepare le queryset de comparables utilisable par le moteur d'estimation.
+        # Les annonces sans prix ou surface sont exclues des la base.
         queryset = MarketListing.objects.filter(
             transaction_type=transaction_type,
             price__isnull=False,
@@ -863,6 +930,8 @@ class MarketValuationView(APIView):
         return queryset.order_by("-last_seen_at")
 
     def _save_valuation(self, request, payload, result):
+        # Sauvegarde une estimation reussie dans le perimetre visible de l'utilisateur.
+        # Le payload stocke reste converti en JSON simple pour la consultation ulterieure.
         organizations = visible_organizations(request.user)
         organization_id = payload.get("organization")
         if organization_id:
@@ -918,7 +987,11 @@ class MarketValuationView(APIView):
 
 
 class InvestmentScoreView(APIView):
+    # Expose le calcul d'un score d'opportunite d'investissement.
+    # L'endpoint combine une estimation a la vente, une estimation locative et un scoring final.
     def post(self, request):
+        # Valide les entrees puis calcule les estimations vente/location necessaires.
+        # La reponse retourne ensuite le score ainsi que les deux estimations detaillees.
         serializer = InvestmentScoreInputSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         payload = serializer.validated_data
@@ -953,7 +1026,11 @@ class InvestmentScoreView(APIView):
 
 
 class ScenarioSimulationView(APIView):
+    # Expose la simulation financiere d'un scenario d'investissement immobilier.
+    # La vue ne fait que valider l'entree puis deleguer le calcul au moteur IA.
     def post(self, request):
+        # Valide les hypotheses de simulation et retourne le resultat calcule.
+        # Toute la logique numerique est centralisee dans l'algorithme dedie.
         serializer = ScenarioSimulationInputSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         result = simulate_investment_scenario(serializer.validated_data)

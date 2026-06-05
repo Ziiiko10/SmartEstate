@@ -1,3 +1,4 @@
+// Barre laterale adaptee au role: navigation, profil et action principale.
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { getHomeRouteForRole, getRoleLabel, getRoleNavigation, getRolePrimaryAction, USER_ROLES } from "../lib/roles";
@@ -6,6 +7,8 @@ import { APP_ROUTES } from "../lib/smartestateApp";
 import UserAvatar from "./UserAvatar";
 
 export default function DashboardSidebar() {
+  // Rend la navigation laterale et mobile adaptee au role connecte.
+  // Le composant gere aussi les actions rapides, le prefetch et la deconnexion.
   const location = useLocation();
   const navigate = useNavigate();
   const { logout, token, user } = useAuth();
@@ -18,15 +21,21 @@ export default function DashboardSidebar() {
   const isSimpleUser = user?.role === USER_ROLES.UTILISATEUR_SIMPLE;
 
   function handleLogout() {
+    // Deconnecte l'utilisateur puis le renvoie vers l'accueil public.
+    // La navigation remplace l'historique pour eviter un retour dans l'espace prive.
     logout();
     navigate(APP_ROUTES.home, { replace: true });
   }
 
   function isActive(paths: string[]) {
+    // Verifie si l'URL actuelle correspond a un item de navigation.
+    // Ce helper active le bon style sur desktop comme sur mobile.
     return paths.some((path) => location.pathname === path || location.pathname.startsWith(`${path}/`));
   }
 
   function getPrefetchHandlers(path: string) {
+    // Retourne les handlers qui rechauffent une route avant son ouverture.
+    // Le meme paquet est reutilise sur les liens de marque, menu et action principale.
     const warmRoute = () => {
       void prefetchRoute(path, { token });
     };

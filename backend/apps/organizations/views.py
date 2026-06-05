@@ -1,3 +1,4 @@
+# API de gestion des equipes et des organisations de la plateforme.
 from django.db.models import Count
 from rest_framework import viewsets
 
@@ -8,10 +9,14 @@ from apps.organizations.serializers import MembershipSerializer, OrganizationSer
 
 
 class OrganizationViewSet(viewsets.ModelViewSet):
+    # Expose le CRUD des organisations visibles pour un administrateur.
+    # Le queryset est annote pour renvoyer directement le nombre de membres.
     permission_classes = [IsAdministrateur]
     serializer_class = OrganizationSerializer
 
     def get_queryset(self):
+        # Retourne uniquement les organisations accessibles a l'utilisateur courant.
+        # Les champs charges sont limites aux besoins de cette ressource API.
         return visible_organizations(self.request.user).annotate(member_count=Count("memberships")).only(
             "id",
             "name",
@@ -22,10 +27,14 @@ class OrganizationViewSet(viewsets.ModelViewSet):
 
 
 class MembershipViewSet(viewsets.ModelViewSet):
+    # Expose la gestion des memberships d'equipe pour les administrateurs.
+    # Les donnees utiles au frontend sont prechargees pour eviter les acces repetes.
     permission_classes = [IsAdministrateur]
     serializer_class = MembershipSerializer
 
     def get_queryset(self):
+        # Retourne les memberships lies aux organisations visibles pour la requete.
+        # Le select_related et le only reduisent ensuite le cout des listes admin.
         organizations = visible_organizations(self.request.user)
         return Membership.objects.filter(organization__in=organizations).select_related(
             "organization",

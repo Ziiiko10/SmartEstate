@@ -1,3 +1,4 @@
+// Client API centralise: gere les requetes, le cache et les erreurs cote front.
 const DEFAULT_API_BASE_URL = "http://127.0.0.1:8000/api";
 
 export const API_BASE_URL =
@@ -12,6 +13,8 @@ const responseCache = new Map<string, CacheEntry>();
 const pendingRequests = new Map<string, Promise<unknown>>();
 
 export class ApiError extends Error {
+  // Encapsule une erreur HTTP retournee par l'API SmartEstate.
+  // Le statut et le payload brut sont conserves pour un diagnostic plus riche.
   details: unknown;
   status: number;
 
@@ -34,10 +37,14 @@ type ApiRequestOptions = {
 };
 
 function normalizeMethod(method?: string) {
+  // Normalise une methode HTTP en uppercase avec GET comme defaut.
+  // Cela simplifie le reste de la logique de cache et de fetch.
   return (method ?? "GET").toUpperCase();
 }
 
 function buildHeaders(body: ApiRequestOptions["body"], headers?: HeadersInit, token?: null | string) {
+  // Construit les headers finaux en ajoutant auth, Accept et Content-Type si utile.
+  // La fonction detecte aussi si le body doit etre serialise en JSON.
   const requestHeaders = new Headers(headers);
 
   if (token) {
@@ -64,6 +71,8 @@ function buildHeaders(body: ApiRequestOptions["body"], headers?: HeadersInit, to
 }
 
 function defaultCacheTtlMs(path: string, method: string) {
+  // Retourne la duree de cache par defaut selon la ressource demandee.
+  // Les endpoints plus couteux ou frequents recoivent un TTL adapte a leur usage.
   if (method !== "GET") {
     return 0;
   }
@@ -98,6 +107,8 @@ function defaultCacheTtlMs(path: string, method: string) {
 }
 
 function serializeBodyForKey(body: ApiRequestOptions["body"], shouldSerializeJson: boolean) {
+  // Transforme le body en cle stable pour le cache de requetes.
+  // Les corps non JSON sont volontairement resumes par une etiquette generique.
   if (body === undefined || body === null) {
     return "";
   }
@@ -130,6 +141,8 @@ function buildCacheKey(
     token?: null | string;
   },
 ) {
+  // Construit une cle de cache unique a partir de la methode, du token et du payload.
+  // Une cle explicite fournie par l'appelant reste prioritaire quand elle existe.
   if (cacheKey) {
     return `${method}:${token ?? "public"}:${cacheKey}`;
   }
@@ -139,6 +152,8 @@ function buildCacheKey(
 }
 
 function extractErrorMessage(payload: unknown, fallback: string) {
+  // Essaie d'extraire le message d'erreur le plus utile depuis un payload API.
+  // Le helper gere les formes detail, non_field_errors et champs standards.
   if (!payload) {
     return fallback;
   }
@@ -173,6 +188,8 @@ function extractErrorMessage(payload: unknown, fallback: string) {
 }
 
 function parseResponsePayload(raw: string) {
+  // Parse la reponse texte en JSON si possible.
+  // Un contenu non JSON est renvoye tel quel pour ne pas perdre l'information brute.
   if (!raw) {
     return null;
   }
@@ -187,6 +204,8 @@ function parseResponsePayload(raw: string) {
 export function clearApiCache(
   matcher?: RegExp | ((key: string) => boolean) | string,
 ) {
+  // Invalide tout ou partie du cache de reponses et de requetes en vol.
+  // Le filtrage peut se faire par sous-chaine, regex ou predicate personnalisee.
   if (!matcher) {
     responseCache.clear();
     pendingRequests.clear();
@@ -214,6 +233,8 @@ export function clearApiCache(
 }
 
 export async function apiRequest<T>(path: string, options: ApiRequestOptions = {}) {
+  // Execute une requete API en gerant cache, dedoublonnage et erreurs homogenes.
+  // Les GET eligibles peuvent reutiliser une reponse cachee ou une promesse deja en cours.
   const { body, cacheKey, forceRefresh = false, headers, token } = options;
   const method = normalizeMethod(options.method);
   const { requestHeaders, shouldSerializeJson } = buildHeaders(body, headers, token);
@@ -286,6 +307,8 @@ export async function apiRequest<T>(path: string, options: ApiRequestOptions = {
 }
 
 export async function apiPrefetch<T>(path: string, options: ApiRequestOptions = {}) {
+  // Lance une requete en arriere-plan sans faire echouer l'interface en cas d'erreur.
+  // Ce helper est utilise par les mecanismes de prechargement de pages.
   try {
     await apiRequest<T>(path, options);
   } catch {
@@ -294,6 +317,8 @@ export async function apiPrefetch<T>(path: string, options: ApiRequestOptions = 
 }
 
 export function getErrorMessage(error: unknown, fallback = "Une erreur est survenue.") {
+  // Convertit une erreur inconnue en message utilisateur lisible.
+  // Les ApiError et Error standard sont traites avant le message de repli.
   if (error instanceof ApiError) {
     return error.message;
   }

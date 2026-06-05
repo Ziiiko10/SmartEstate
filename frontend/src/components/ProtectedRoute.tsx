@@ -1,3 +1,4 @@
+// Garde de route: verifie l'authentification et le role avant d'afficher la page.
 import { type PropsWithChildren, useEffect } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
@@ -11,10 +12,14 @@ type ProtectedRouteProps = PropsWithChildren<{
 }>;
 
 export default function ProtectedRoute({ allowedRoles, children }: ProtectedRouteProps) {
+  // Protege une route en verifiant session, role et prechargement de l'espace connecte.
+  // Si tout est valide, la page est rendue dans le shell dashboard approprie.
   const { isAuthenticated, isBootstrapping, token, user } = useAuth();
   const location = useLocation();
 
   useEffect(() => {
+    // Prefetche apres un court delai les routes de travail les plus probables.
+    // Cela accelere la navigation interne une fois l'utilisateur connecte.
     if (!isAuthenticated) {
       return;
     }

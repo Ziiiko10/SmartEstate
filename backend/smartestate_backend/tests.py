@@ -1,3 +1,4 @@
+# Tests globaux du projet backend quand ils ne ciblent pas une app specifique.
 from django.contrib.auth.models import AnonymousUser
 from django.test import TestCase, override_settings
 
@@ -6,6 +7,8 @@ from smartestate_backend.access import visible_organizations
 
 
 class PublicDemoAccessTests(TestCase):
+    # Verifie les regles de visibilite des organisations en mode demo public.
+    # Ces tests protegent le comportement attendu pour les utilisateurs anonymes.
     def test_anonymous_user_can_see_organizations_in_public_demo_mode(self):
         organization = Organization.objects.create(name="SmartEstate Demo")
 

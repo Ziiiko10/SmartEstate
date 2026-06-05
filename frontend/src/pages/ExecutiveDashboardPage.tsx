@@ -1,7 +1,25 @@
-import { type ReactNode, useCallback, useEffect, useState } from "react";
+// Dashboard partage admin/agent: KPI, graphiques, tableaux et actions rapides.
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import {
+  ChartBlock,
+  DataRow,
+  EmptyBlock,
+  HorizontalBarChartCard,
+  LegendPill,
+  LineChartCard,
+  LiveBadge,
+  ListPanel,
+  MetricCard,
+  QuickActionButton,
+  SectionTitle,
+  SectionTitleDark,
+  StatusBadge,
+  TableActionButton,
+} from "../components/DashboardWidgets";
 import ImportedPageDocument from "../components/ImportedPageDocument";
 import { DashboardPageLoader } from "../components/LoadingState";
+import { InfoCard } from "../components/PageWidgets";
 import { useAuth } from "../auth/AuthContext";
 import { apiRequest, getErrorMessage } from "../lib/api";
 import { getRoleLabel, USER_ROLES } from "../lib/roles";
@@ -266,6 +284,7 @@ const emptyDashboard: DashboardOverview = {
   valuations_by_city: [],
 };
 
+// Formate les montants du dashboard pour les KPI, tableaux et panneaux.
 function formatMoney(value: number | null | undefined, compact = true) {
   const amount = Number(value ?? 0);
   if (compact && Math.abs(amount) >= 1_000_000) {
@@ -280,6 +299,7 @@ function formatMoney(value: number | null | undefined, compact = true) {
   })} DH`;
 }
 
+// Uniformise l'affichage des pourcentages et signale les valeurs absentes.
 function formatPercent(value: number | null | undefined) {
   if (value === null || value === undefined) {
     return "Non disponible";
@@ -291,10 +311,12 @@ function formatPercent(value: number | null | undefined) {
   })}%`;
 }
 
+// Affiche les compteurs entiers avec la locale marocaine.
 function formatCount(value: number | null | undefined) {
   return Number(value ?? 0).toLocaleString("fr-MA");
 }
 
+// Formate une metrique nullable avec un suffixe optionnel.
 function formatNullableMetric(value: number | null | undefined, suffix = "") {
   if (value === null || value === undefined) {
     return "Non disponible";
@@ -306,6 +328,7 @@ function formatNullableMetric(value: number | null | undefined, suffix = "") {
   })}${suffix}`;
 }
 
+// Rend les horodatages backend lisibles dans l'interface de pilotage.
 function formatDate(value: string | null | undefined) {
   if (!value) {
     return "Non historise";
@@ -317,6 +340,7 @@ function formatDate(value: string | null | undefined) {
   }).format(new Date(value));
 }
 
+// Produit un libelle court adapte aux axes temporels des graphiques.
 function formatChartDateLabel(value: string) {
   if (!value) {
     return "";
@@ -328,6 +352,7 @@ function formatChartDateLabel(value: string) {
   }).format(new Date(value));
 }
 
+// Transforme une date en indicateur relatif recent pour les flux d'activite.
 function formatRelative(value: string) {
   if (!value) {
     return "Aucune date";
@@ -345,6 +370,7 @@ function formatRelative(value: string) {
   return formatDate(value);
 }
 
+// Point d'entree du dashboard partage entre administrateurs et agents immobiliers.
 export default function ExecutiveDashboardPage() {
   const navigate = useNavigate();
   const { logout, token, user } = useAuth();
@@ -352,6 +378,7 @@ export default function ExecutiveDashboardPage() {
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(true);
 
+  // Recharge les donnees du dashboard, avec option d'actualisation forcee.
   const loadDashboard = useCallback(
     async (forceRefresh = false) => {
       setIsLoading(true);
@@ -372,6 +399,7 @@ export default function ExecutiveDashboardPage() {
     [token],
   );
 
+  // Charge le dashboard au montage puis installe l'actualisation automatique.
   useEffect(() => {
     void loadDashboard();
     const interval = window.setInterval(() => {
@@ -388,6 +416,7 @@ export default function ExecutiveDashboardPage() {
   const pageTitle = isAdmin ? "Tableau de bord administrateur" : "Tableau de bord agent immobilier";
   const isInitialLoading = isLoading && dashboard.refreshed_at === "" && !error;
 
+  // Deconnecte l'utilisateur puis le ramene vers l'entree publique.
   function handleSignOut() {
     logout();
     navigate("/", { replace: true });
@@ -462,6 +491,7 @@ export default function ExecutiveDashboardPage() {
   );
 }
 
+// Compose le dashboard administrateur avec ses graphiques, tableaux et acces de gestion.
 function AdminDashboardContent({
   dashboard,
   navigate,
@@ -607,7 +637,6 @@ function AdminDashboardContent({
             <QuickActionButton label="Gerer les villes et quartiers" onClick={() => navigate(APP_ROUTES.adminLocations)} />
             <QuickActionButton label="Gerer les donnees immobilieres" onClick={() => navigate(APP_ROUTES.adminData)} />
             <QuickActionButton label="Gerer le modele ML" onClick={() => navigate(APP_ROUTES.adminModel)} />
-            <QuickActionButton label="Voir les statistiques globales" onClick={() => navigate(APP_ROUTES.adminStats)} />
           </div>
         </div>
       </section>
@@ -842,6 +871,7 @@ function AdminDashboardContent({
   );
 }
 
+// Compose le dashboard agent autour de la performance commerciale et des opportunites visibles.
 function AgentDashboardContent({
   dashboard,
   navigate,
@@ -1206,7 +1236,6 @@ function AgentDashboardContent({
             <QuickActionButton label="Voir mes annonces" onClick={() => navigate(APP_ROUTES.agentListings)} />
             <QuickActionButton label="Estimer un bien" onClick={() => navigate(APP_ROUTES.agentEstimation)} />
             <QuickActionButton label="Voir les demandes clients" onClick={() => navigate(APP_ROUTES.agentRequests)} />
-            <QuickActionButton label="Voir mes statistiques" onClick={() => navigate(APP_ROUTES.agentStats)} />
             <QuickActionButton label="Modifier mon profil" onClick={() => navigate(APP_ROUTES.agentProfile)} />
           </div>
         </div>
@@ -1274,373 +1303,3 @@ function AgentDashboardContent({
 }
 
 // Affiche l'evolution de plusieurs series sur 7 jours dans une seule carte.
-function LineChartCard({
-  lines,
-  points,
-  subtitle,
-  title,
-}: {
-  lines: { color: string; key: keyof ActivitySeriesPoint; label: string }[];
-  points: ActivitySeriesPoint[];
-  subtitle: string;
-  title: string;
-}) {
-  const width = 560;
-  const height = 220;
-  const paddingX = 20;
-  const paddingTop = 18;
-  const paddingBottom = 36;
-  const usableWidth = width - paddingX * 2;
-  const usableHeight = height - paddingTop - paddingBottom;
-  const maxValue = Math.max(
-    0,
-    ...points.flatMap((point) => lines.map((line) => Number(point[line.key] ?? 0))),
-  );
-
-  function buildPolyline(key: keyof ActivitySeriesPoint) {
-    if (points.length === 0) {
-      return "";
-    }
-
-    return points
-      .map((point, index) => {
-        const x =
-          points.length === 1
-            ? width / 2
-            : paddingX + (index / (points.length - 1)) * usableWidth;
-        const y =
-          paddingTop +
-          usableHeight -
-          ((Number(point[key] ?? 0) / Math.max(maxValue, 1)) * usableHeight);
-        return `${x},${y}`;
-      })
-      .join(" ");
-  }
-
-  return (
-    <div className="rounded-2xl bg-white p-6 shadow-sm">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <SectionTitle subtitle={subtitle} title={title} />
-        <LiveBadge />
-      </div>
-      <div className="mt-5 flex flex-wrap gap-4">
-        {lines.map((line) => (
-          <LegendPill color={line.color} key={line.key} label={line.label} />
-        ))}
-      </div>
-      {points.length === 0 || maxValue === 0 ? (
-        <div className="mt-6">
-          <EmptyBlock text="Aucune serie temporelle exploitable n'est disponible pour le moment." />
-        </div>
-      ) : (
-        <div className="mt-6">
-          <svg
-            aria-label={title}
-            className="h-auto w-full"
-            role="img"
-            viewBox={`0 0 ${width} ${height}`}
-          >
-            {[0, 1, 2, 3].map((step) => {
-              const y = paddingTop + (usableHeight / 3) * step;
-              return (
-                <line
-                  key={step}
-                  stroke="#e5e7eb"
-                  strokeDasharray="4 4"
-                  strokeWidth="1"
-                  x1={paddingX}
-                  x2={width - paddingX}
-                  y1={y}
-                  y2={y}
-                />
-              );
-            })}
-            {lines.map((line) => (
-              <g key={line.key}>
-                <polyline
-                  fill="none"
-                  points={buildPolyline(line.key)}
-                  stroke={line.color}
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="4"
-                />
-                {points.map((point, index) => {
-                  const x =
-                    points.length === 1
-                      ? width / 2
-                      : paddingX + (index / (points.length - 1)) * usableWidth;
-                  const y =
-                    paddingTop +
-                    usableHeight -
-                    ((Number(point[line.key] ?? 0) / Math.max(maxValue, 1)) * usableHeight);
-                  return (
-                    <circle
-                      cx={x}
-                      cy={y}
-                      fill="#ffffff"
-                      key={`${line.key}-${point.date}`}
-                      r="4.5"
-                      stroke={line.color}
-                      strokeWidth="3"
-                    />
-                  );
-                })}
-              </g>
-            ))}
-            {points.map((point, index) => {
-              const x =
-                points.length === 1
-                  ? width / 2
-                  : paddingX + (index / (points.length - 1)) * usableWidth;
-              return (
-                <text
-                  fill="#64748b"
-                  fontSize="12"
-                  key={point.date}
-                  textAnchor="middle"
-                  x={x}
-                  y={height - 10}
-                >
-                  {formatChartDateLabel(point.date)}
-                </text>
-              );
-            })}
-          </svg>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// Compare plusieurs volumes sur une meme echelle horizontale.
-function HorizontalBarChartCard({
-  formatter,
-  items,
-  subtitle,
-  title,
-}: {
-  formatter: (value: number) => string;
-  items: { color: string; label: string; secondary?: string; value: number }[];
-  subtitle: string;
-  title: string;
-}) {
-  const maxValue = Math.max(0, ...items.map((item) => item.value));
-
-  return (
-    <div className="rounded-2xl bg-white p-6 shadow-sm">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <SectionTitle subtitle={subtitle} title={title} />
-        <LiveBadge />
-      </div>
-      <div className="mt-6 space-y-4">
-        {items.length === 0 || maxValue === 0 ? (
-          <EmptyBlock text="Aucune distribution exploitable n'est disponible pour ce graphique." />
-        ) : (
-          items.map((item) => (
-            <div key={`${title}-${item.label}`}>
-              <div className="mb-2 flex items-center justify-between gap-4">
-                <div>
-                  <p className="font-semibold text-primary">{item.label}</p>
-                  {item.secondary ? (
-                    <p className="text-xs text-on-surface-variant">{item.secondary}</p>
-                  ) : null}
-                </div>
-                <span className="text-sm font-bold text-secondary">{formatter(item.value)}</span>
-              </div>
-              <div className="h-3 overflow-hidden rounded-full bg-surface-container-low">
-                <div
-                  className="h-full rounded-full transition-[width] duration-500"
-                  style={{
-                    backgroundColor: item.color,
-                    width: `${Math.max(10, (item.value / maxValue) * 100)}%`,
-                  }}
-                />
-              </div>
-            </div>
-          ))
-        )}
-      </div>
-    </div>
-  );
-}
-
-function ChartBlock({
-  children,
-  tone,
-}: {
-  children: ReactNode;
-  tone: "amber" | "blue";
-}) {
-  const shellClassName =
-    tone === "blue"
-      ? "rounded-[28px] border border-[#d8e4ff] bg-[linear-gradient(180deg,#f7faff_0%,#eef4ff_100%)] p-3"
-      : "rounded-[28px] border border-[#f2dfb8] bg-[linear-gradient(180deg,#fffaf0_0%,#fff4de_100%)] p-3";
-
-  return <div className={shellClassName}>{children}</div>;
-}
-
-function LiveBadge() {
-  return (
-    <span className="inline-flex items-center gap-2 rounded-full bg-secondary-container px-3 py-2 text-[11px] font-bold uppercase tracking-widest text-secondary">
-      <span className="h-2.5 w-2.5 rounded-full bg-secondary animate-pulse" />
-      Temps reel
-    </span>
-  );
-}
-
-function LegendPill({ color, label }: { color: string; label: string }) {
-  return (
-    <span className="inline-flex items-center gap-2 rounded-full bg-surface-container-low px-3 py-2 text-xs font-semibold text-primary">
-      <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: color }} />
-      {label}
-    </span>
-  );
-}
-
-function SectionTitle({ subtitle, title }: { subtitle?: string; title: string }) {
-  return (
-    <div>
-      <h2 className="font-headline text-2xl font-extrabold text-primary">{title}</h2>
-      {subtitle ? <p className="mt-2 text-sm text-on-surface-variant">{subtitle}</p> : null}
-    </div>
-  );
-}
-
-function SectionTitleDark({ subtitle, title }: { subtitle: string; title: string }) {
-  return (
-    <div>
-      <h2 className="font-headline text-2xl font-extrabold text-white">{title}</h2>
-      <p className="mt-2 text-sm text-primary-fixed">{subtitle}</p>
-    </div>
-  );
-}
-
-function MetricCard({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-2xl bg-white p-6 shadow-sm">
-      <p className="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">{label}</p>
-      <p className="mt-3 font-headline text-3xl font-extrabold text-primary">{value}</p>
-    </div>
-  );
-}
-
-function InfoCard({
-  label,
-  secondary,
-  value,
-}: {
-  label: string;
-  secondary: string;
-  value: string;
-}) {
-  return (
-    <div className="rounded-2xl bg-surface-container-low px-5 py-5">
-      <p className="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">{label}</p>
-      <p className="mt-2 font-headline text-2xl font-extrabold text-primary">{value}</p>
-      <p className="mt-2 text-sm text-on-surface-variant">{secondary}</p>
-    </div>
-  );
-}
-
-function ListPanel({
-  items,
-  title,
-}: {
-  items: { label: string; secondary: string; value: string }[];
-  title: string;
-}) {
-  return (
-    <div>
-      <h3 className="font-headline text-lg font-bold text-primary">{title}</h3>
-      <div className="mt-4 space-y-3">
-        {items.length === 0 ? (
-          <EmptyBlock text="Aucune donnee disponible." />
-        ) : (
-          items.map((item) => (
-            <div className="rounded-xl bg-surface-container-low px-4 py-4" key={`${title}-${item.label}`}>
-              <div className="flex items-center justify-between gap-4">
-                <p className="font-semibold text-primary">{item.label}</p>
-                <span className="font-semibold text-secondary">{item.value}</span>
-              </div>
-              <p className="mt-1 text-sm text-on-surface-variant">{item.secondary}</p>
-            </div>
-          ))
-        )}
-      </div>
-    </div>
-  );
-}
-
-function DataRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-start justify-between gap-4 border-b border-outline-variant/20 pb-3 text-sm">
-      <span className="text-on-surface-variant">{label}</span>
-      <span className="text-right font-semibold text-primary">{value}</span>
-    </div>
-  );
-}
-
-function QuickActionButton({ label, onClick }: { label: string; onClick: () => void }) {
-  return (
-    <button
-      className="rounded-xl bg-white/10 px-4 py-3 text-left text-sm font-bold text-white transition-colors hover:bg-white/15"
-      onClick={onClick}
-      type="button"
-    >
-      {label}
-    </button>
-  );
-}
-
-function TableActionButton({
-  label,
-  onClick,
-  tone,
-}: {
-  label: string;
-  onClick: () => void;
-  tone: "danger" | "ghost" | "primary";
-}) {
-  const className =
-    tone === "primary"
-      ? "bg-primary text-white hover:bg-primary/90"
-      : tone === "danger"
-        ? "border border-red-200 text-red-700 hover:bg-red-50"
-        : "border border-outline-variant/20 text-primary hover:bg-surface-container-low";
-
-  return (
-    <button
-      className={`rounded-lg px-3 py-2 text-xs font-bold transition-colors ${className}`}
-      onClick={onClick}
-      type="button"
-    >
-      {label}
-    </button>
-  );
-}
-
-function StatusBadge({
-  label,
-  tone,
-}: {
-  label: string;
-  tone: "neutral" | "success" | "warning";
-}) {
-  const className =
-    tone === "success"
-      ? "bg-secondary-container text-secondary"
-      : tone === "warning"
-        ? "bg-amber-100 text-amber-700"
-        : "bg-surface-container-low text-on-surface-variant";
-
-  return <span className={`rounded-full px-3 py-1 text-xs font-bold ${className}`}>{label}</span>;
-}
-
-function EmptyBlock({ text }: { text: string }) {
-  return (
-    <div className="rounded-xl border border-dashed border-outline-variant/40 bg-surface-container-low px-4 py-5 text-sm text-on-surface-variant">
-      {text}
-    </div>
-  );
-}

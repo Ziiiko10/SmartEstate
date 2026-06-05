@@ -1,3 +1,4 @@
+// Validation des agents: charge les profils, les rattachements et les actions de moderation.
 import { useEffect, useMemo, useState } from "react";
 import ImportedPageDocument from "../components/ImportedPageDocument";
 import { useAuth } from "../auth/AuthContext";
@@ -23,6 +24,7 @@ type MembershipRecord = {
   user_email: string;
 };
 
+// Centralise la moderation des comptes agents immobiliers et leur statut d'activation.
 export default function AdminAgentsPage() {
   const { token } = useAuth();
   const [agents, setAgents] = useState<ManagedUser[]>([]);
@@ -30,9 +32,11 @@ export default function AdminAgentsPage() {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
 
+  // Charge les agents et leurs rattachements d'organisation pour afficher le contexte commercial.
   useEffect(() => {
     let active = true;
 
+    // Recupere en parallele les comptes agents et les memberships associes.
     async function loadData() {
       try {
         const [agentPayload, membershipPayload] = await Promise.all([
@@ -59,6 +63,7 @@ export default function AdminAgentsPage() {
     };
   }, [token]);
 
+  // Construit une table de correspondance email -> organisation pour l'affichage des cartes.
   const agencyByEmail = useMemo(() => {
     const mapping = new Map<string, string>();
     memberships.forEach((membership) => {
@@ -69,6 +74,7 @@ export default function AdminAgentsPage() {
     return mapping;
   }, [memberships]);
 
+  // Met a jour le compte agent cible puis reflete le changement dans l'interface.
   async function patchAgent(id: number, payload: Partial<ManagedUser>, successMessage: string) {
     setMessage("");
     setError("");

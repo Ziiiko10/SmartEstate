@@ -1,9 +1,10 @@
+// Ecran d'inscription publique: profil, role autorise, validation et creation du compte.
 import { type FormEvent, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import ImportedPageDocument from "../components/ImportedPageDocument";
 import { getErrorMessage } from "../lib/api";
-import { getHomeRouteForRole } from "../lib/roles";
+import { getHomeRouteForRole, USER_ROLES, type UserRole } from "../lib/roles";
 import { APP_ROUTES } from "../lib/smartestateApp";
 
 const pageStyles = `.material-symbols-outlined {
@@ -16,23 +17,24 @@ const pageStyles = `.material-symbols-outlined {
         background: linear-gradient(135deg, #1b6d24 0%, #217128 100%);
       }`;
 
+// Gere l'inscription publique et redirige l'utilisateur vers son espace apres creation.
 export default function SignupPage() {
   const navigate = useNavigate();
   const { register } = useAuth();
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
+  const [role, setRole] = useState<UserRole>(USER_ROLES.UTILISATEUR_SIMPLE);
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [error, setError] = useState<null | string>(null);
-  const [hint, setHint] = useState<null | string>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Valide le formulaire puis cree le compte via le contexte d'authentification.
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
-    setHint(null);
 
     if (password !== confirmPassword) {
       setError("La confirmation du mot de passe ne correspond pas.");
@@ -52,6 +54,7 @@ export default function SignupPage() {
         full_name: fullName,
         password,
         phone_number: `+212${phone.replace(/\s+/g, "")}`,
+        role,
       });
       navigate(getHomeRouteForRole(registeredUser.role), { replace: true });
     } catch (submissionError) {
@@ -59,27 +62,6 @@ export default function SignupPage() {
     } finally {
       setIsSubmitting(false);
     }
-  }
-
-  function fillInvestorExample(provider: "Google" | "LinkedIn") {
-    const providerValues =
-      provider === "Google"
-        ? {
-            email: "investisseur.demo@smartestate.ma",
-            fullName: "Yassine Mansouri",
-            phone: "600000000",
-          }
-        : {
-            email: "atlas.capital@smartestate.ma",
-            fullName: "Leila Bennani",
-            phone: "661112233",
-          };
-
-    setEmail(providerValues.email);
-    setFullName(providerValues.fullName);
-    setPhone(providerValues.phone);
-    setHint(`Profil ${provider} pre-rempli. Il ne reste plus qu'a definir votre mot de passe.`);
-    setError(null);
   }
 
   return (
@@ -172,48 +154,6 @@ export default function SignupPage() {
               </div>
             ) : null}
 
-            {hint ? (
-              <div className="mb-6 rounded-lg border border-secondary/20 bg-secondary/5 px-4 py-3 text-sm text-secondary">
-                {hint}
-              </div>
-            ) : null}
-
-            <div className="mb-10 grid grid-cols-2 gap-4">
-              <button
-                className="group editorial-shadow flex items-center justify-center gap-3 rounded-lg border border-outline-variant/20 bg-surface-container-lowest px-4 py-3 transition-all hover:bg-surface-bright"
-                type="button"
-                data-disable-prototype-actions="true"
-                onClick={() => fillInvestorExample("Google")}
-              >
-                <img
-                  alt="Google"
-                  className="h-5 w-5 grayscale transition-all group-hover:grayscale-0"
-                  src="https://lh3.googleusercontent.com/aida-public/AB6AXuBJ5HXNNtX76vC3rpsVak5Cc9Huu0NAvFqs4fEN4fWNY02qOOzPEN9C4Fy0Nrc8ZBAK43HOXm5O-KsjVf_CI1z4jMH3XyBOoQy0zSby3DcXpLCNVTa11kwSiTxS5DjIlsoR6Jy_MkTUQw_u_cCxDWlms5wiw1bxrEccYNuot1YZJdAIEoROh3n49SMo1RED_SlnRUgoLFu2mamvZup5SE0itZm8UK33JmcVdFLIE3bp1NLBl_MZIBG6gqzDD-qMRV3Pl_xMdNWHLNno"
-                />
-                <span className="text-sm font-semibold text-on-surface">Google</span>
-              </button>
-
-              <button
-                className="group editorial-shadow flex items-center justify-center gap-3 rounded-lg border border-outline-variant/20 bg-surface-container-lowest px-4 py-3 transition-all hover:bg-surface-bright"
-                type="button"
-                data-disable-prototype-actions="true"
-                onClick={() => fillInvestorExample("LinkedIn")}
-              >
-                <svg className="h-5 w-5 text-[#0077b5]" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z" />
-                </svg>
-                <span className="text-sm font-semibold text-on-surface">LinkedIn</span>
-              </button>
-            </div>
-
-            <div className="relative mb-10 flex items-center">
-              <div className="flex-grow border-t border-outline-variant/30" />
-              <span className="mx-4 flex-shrink text-xs font-label uppercase tracking-widest text-on-surface-variant">
-                Ou par e-mail
-              </span>
-              <div className="flex-grow border-t border-outline-variant/30" />
-            </div>
-
             <form className="space-y-6" onSubmit={handleSubmit}>
               <div className="group">
                 <label
@@ -251,6 +191,25 @@ export default function SignupPage() {
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
                 />
+              </div>
+
+              <div className="group">
+                <label
+                  className="mb-2 block text-xs font-label font-bold uppercase tracking-wider text-on-surface-variant transition-colors group-focus-within:text-primary"
+                  htmlFor="role"
+                >
+                  Type de compte
+                </label>
+                <select
+                  className="w-full border-b-2 border-transparent bg-surface-container-low px-0 py-3 font-medium text-on-surface transition-all focus:border-primary focus:ring-0"
+                  id="role"
+                  name="role"
+                  value={role}
+                  onChange={(event) => setRole(event.target.value as UserRole)}
+                >
+                  <option value={USER_ROLES.UTILISATEUR_SIMPLE}>Utilisateur particulier</option>
+                  <option value={USER_ROLES.AGENT_IMMOBILIER}>Agent immobilier</option>
+                </select>
               </div>
 
               <div className="group">

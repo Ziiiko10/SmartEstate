@@ -68,3 +68,81 @@
 [2m00:49:17[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/AgentStatisticsPage.tsx[22m
 [2m00:49:25[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/AiRecommendationsPage.tsx[22m
 [2m00:49:34[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/App.tsx, /src/auth/AuthContext.tsx, /src/components/ProtectedRoute.tsx, /src/components/DashboardSidebar.tsx[22m
+[2m01:17:17[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/MarketListingsPage.tsx[22m
+[2m01:23:01[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/auth/AuthContext.tsx[22m
+[2m01:23:01[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/components/DashboardSidebar.tsx[22m
+[2m01:23:02[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/ProfilePage.tsx[22m
+[2m01:23:38[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/ProfilePage.tsx[22m
+[2m01:28:22[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/ExecutiveDashboardPage.tsx[22m
+[2m01:30:08[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/ExecutiveDashboardPage.tsx[22m
+[2m01:34:21[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/ExecutiveDashboardPage.tsx[22m
+[2m01:43:46[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/UserInvestmentSimulationPage.tsx[22m
+[2m01:45:47[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/ExecutiveDashboardPage.tsx[22m
+[2m01:45:54[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/ExecutiveDashboardPage.tsx[22m
+[2m01:53:35[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/UserInvestmentSimulationPage.tsx[22m
+[2m02:12:46[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/main.tsx[22m
+[2m02:14:25[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/App.tsx[22m
+[2m02:14:25[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/auth/AuthContext.tsx[22m
+[2m02:14:26[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/components/ProtectedRoute.tsx[22m
+[2m02:14:27[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/components/GuestRoute.tsx[22m
+[2m02:14:27[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/components/DashboardSidebar.tsx[22m
+[2m02:14:28[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/components/ImportedPageDocument.tsx[22m
+[2m02:14:30[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/auth/AuthContext.tsx, /src/App.tsx, /src/components/ProtectedRoute.tsx, /src/components/DashboardSidebar.tsx, /src/pages/MarketListingsPage.tsx, /src/pages/AiEstimationPage.tsx, /src/pages/AgentStatisticsPage.tsx, /src/pages/AdminUsersPage.tsx, /src/pages/AdminListingsPage.tsx, /src/pages/AdminStatisticsPage.tsx, /src/pages/AiRecommendationsPage.tsx[22m
+[2m02:14:30[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/App.tsx, /src/auth/AuthContext.tsx, /src/components/GuestRoute.tsx, /src/components/ProtectedRoute.tsx, /src/components/DashboardSidebar.tsx, /src/components/ImportedPageDocument.tsx, /src/pages/AiEstimationPage.tsx, /src/pages/ProfilePage.tsx, /src/pages/AdminUsersPage.tsx, /src/pages/AiRecommendationsPage.tsx[22m
+[2m02:14:31[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/App.tsx, /src/auth/AuthContext.tsx, /src/components/ProtectedRoute.tsx, /src/components/DashboardSidebar.tsx, /src/components/ImportedPageDocument.tsx, /src/components/GuestRoute.tsx, /src/pages/AiEstimationPage.tsx, /src/pages/ProfilePage.tsx, /src/pages/AdminUsersPage.tsx, /src/pages/AiRecommendationsPage.tsx[22m
+[2m02:14:32[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/App.tsx, /src/auth/AuthContext.tsx, /src/components/ProtectedRoute.tsx, /src/components/DashboardSidebar.tsx[22m
+[2m02:14:32[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/components/ImportedPageDocument.tsx[22m
+[2m02:14:49[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/HomePage.tsx[22m
+[2m02:14:51[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/ProfilePage.tsx[22m
+[2m02:14:51[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/ExecutiveDashboardPage.tsx[22m
+[2m02:14:52[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/AiEstimationPage.tsx[22m
+[2m02:14:52[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/UserInvestmentSimulationPage.tsx[22m
+[2m02:14:53[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/MarketListingsPage.tsx[22m
+[2m02:14:54[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/AiRecommendationsPage.tsx[22m
+[2m02:14:55[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/AdminUsersPage.tsx[22m
+[2m02:20:42[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/auth/AuthContext.tsx[22m
+[2m02:20:51[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/ProfilePage.tsx[22m
+[2m02:39:32[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/ProfilePage.tsx[22m
+[2m02:43:04[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/UserInvestmentSimulationPage.tsx[22m
+[2m02:43:17[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/UserInvestmentSimulationPage.tsx[22m
+[2m02:44:41[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/ExecutiveDashboardPage.tsx[22m
+[2m02:44:41[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/ExecutiveDashboardPage.tsx[22m
+[2m02:44:56[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/ExecutiveDashboardPage.tsx[22m
+[2m02:45:24[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/ExecutiveDashboardPage.tsx[22m
+[2m02:46:10[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/AdminListingsPage.tsx[22m
+[2m02:46:12[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/AdminStatisticsPage.tsx[22m
+[2m02:48:14[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/AdminListingsPage.tsx[22m
+[2m02:48:16[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/AdminStatisticsPage.tsx[22m
+[2m02:49:49[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/AgentListingsPage.tsx[22m
+[2m02:50:03[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/MarketListingsPage.tsx[22m
+[2m02:50:14[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/AgentStatisticsPage.tsx[22m
+[2m09:37:01[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/main.tsx[22m
+[2m09:37:01[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/App.tsx[22m
+[2m09:37:02[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/auth/AuthContext.tsx[22m
+[2m09:37:03[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/auth/AuthContext.tsx, /src/App.tsx, /src/components/ProtectedRoute.tsx, /src/components/DashboardSidebar.tsx, /src/pages/MarketListingsPage.tsx, /src/pages/AiEstimationPage.tsx, /src/pages/AgentStatisticsPage.tsx, /src/pages/AdminUsersPage.tsx, /src/pages/AdminListingsPage.tsx, /src/pages/AdminStatisticsPage.tsx, /src/pages/AiRecommendationsPage.tsx[22m
+[2m09:37:03[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/App.tsx, /src/auth/AuthContext.tsx, /src/components/ProtectedRoute.tsx, /src/components/DashboardSidebar.tsx[22m
+[2m09:37:04[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/App.tsx, /src/auth/AuthContext.tsx, /src/components/GuestRoute.tsx, /src/components/ProtectedRoute.tsx, /src/components/DashboardSidebar.tsx, /src/components/ImportedPageDocument.tsx, /src/pages/AiEstimationPage.tsx, /src/pages/ProfilePage.tsx, /src/pages/AdminUsersPage.tsx, /src/pages/AiRecommendationsPage.tsx[22m
+[2m09:37:04[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/App.tsx, /src/auth/AuthContext.tsx, /src/components/ProtectedRoute.tsx, /src/components/DashboardSidebar.tsx, /src/components/ImportedPageDocument.tsx, /src/components/GuestRoute.tsx, /src/pages/AiEstimationPage.tsx, /src/pages/ProfilePage.tsx, /src/pages/AdminUsersPage.tsx, /src/pages/AiRecommendationsPage.tsx[22m
+[2m09:38:05[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/components/ProtectedRoute.tsx[22m
+[2m09:38:05[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/components/GuestRoute.tsx[22m
+[2m09:38:06[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/components/LoadingState.tsx[22m
+[2m09:38:07[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/components/DashboardSidebar.tsx[22m
+[2m09:38:07[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/components/ImportedPageDocument.tsx[22m
+[2m09:38:08[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/components/ImportedPageDocument.tsx[22m
+[2m09:38:08[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/AgentListingsPage.tsx, /src/pages/ProfilePage.tsx, /src/pages/AgentStatisticsPage.tsx, /src/pages/AgentClientRequestsPage.tsx, /src/pages/UserInvestmentSimulationPage.tsx, /src/pages/AdminUsersPage.tsx, /src/pages/AdminListingsPage.tsx, /src/pages/AdminStatisticsPage.tsx[22m
+[2m09:41:32[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/HomePage.tsx[22m
+[2m09:41:33[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/ProfilePage.tsx[22m
+[2m09:41:34[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/AgentListingsPage.tsx[22m
+[2m09:41:34[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/AgentClientRequestsPage.tsx[22m
+[2m09:41:36[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/AdminListingsPage.tsx[22m
+[2m09:46:01[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/AdminUsersPage.tsx[22m
+[2m09:46:02[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/AdminStatisticsPage.tsx[22m
+[2m09:46:02[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/AgentStatisticsPage.tsx[22m
+[2m09:46:41[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/AiEstimationPage.tsx[22m
+[2m09:47:02[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/AiRecommendationsPage.tsx[22m
+[2m09:49:13[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/MarketListingsPage.tsx[22m
+[2m09:49:36[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/UserInvestmentSimulationPage.tsx[22m
+[2m09:50:18[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/ExecutiveDashboardPage.tsx[22m
+[2m09:50:38[22m [36m[1m[vite][22m[39m [32mvite.config.js changed, restarting server...[39m
+[2m09:50:38[22m [36m[1m[vite][22m[39m [32mvite.config.js changed, restarting server...[39m
+[2m09:50:39[22m [36m[1m[vite][22m[39m server restarted.

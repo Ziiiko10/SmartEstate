@@ -1,6 +1,10 @@
+// Formatters partages pour nombres, dates et themes de villes.
+// Le module garde un rendu coherent entre les differents espaces du frontend.
 export type ApiNumber = number | string | null | undefined;
 
 export function toNumber(value: ApiNumber) {
+  // Convertit une valeur API heterogene en nombre fiable.
+  // Toute entree vide ou invalide retombe sur 0 pour simplifier les usages UI.
   if (value === null || value === undefined || value === "") {
     return 0;
   }
@@ -10,6 +14,8 @@ export function toNumber(value: ApiNumber) {
 }
 
 export function formatDh(value: ApiNumber, compact = false) {
+  // Formate un montant en dirhams marocains pour l'interface.
+  // Le mode compact bascule en MDH pour les montants tres eleves.
   const amount = toNumber(value);
 
   if (compact && Math.abs(amount) >= 1_000_000) {
@@ -25,6 +31,8 @@ export function formatDh(value: ApiNumber, compact = false) {
 }
 
 export function formatPercent(value: ApiNumber, digits = 1) {
+  // Formate un ratio numerique en pourcentage avec precision configurable.
+  // La conversion initiale passe toujours par toNumber pour rester defensive.
   return `${toNumber(value).toLocaleString("fr-MA", {
     maximumFractionDigits: digits,
     minimumFractionDigits: digits,
@@ -32,6 +40,8 @@ export function formatPercent(value: ApiNumber, digits = 1) {
 }
 
 export function formatDateTime(value: string) {
+  // Formate une date ISO en date/heure lisible pour le public marocain.
+  // Une valeur vide renvoie un libelle de repli plutot qu'une erreur.
   if (!value) {
     return "N/A";
   }
@@ -43,6 +53,8 @@ export function formatDateTime(value: string) {
 }
 
 export function formatRelative(value: string) {
+  // Retourne une representation relative simple d'une date recente.
+  // Au-dela de 24 heures, le helper repasse sur le format date complet.
   if (!value) {
     return "Aucune activité";
   }
@@ -56,6 +68,8 @@ export function formatRelative(value: string) {
 }
 
 export function cityGradient(city: string) {
+  // Associe certaines villes a un degrade visuel stable dans l'interface.
+  // Une palette de secours couvre les villes non explicitement mappees.
   const palette: Record<string, string> = {
     Agadir: "from-[#0f766e] via-[#14b8a6] to-[#67e8f9]",
     Casablanca: "from-[#183153] via-[#1b6d24] to-[#89b0ae]",

@@ -1,3 +1,5 @@
+// Catalogue statique des pages de demonstration exposees dans le frontend.
+// Chaque entree fournit un titre, un apercu et une categorie de navigation.
 export type CatalogPage = {
   category: string;
   description: string;

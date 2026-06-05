@@ -1,3 +1,4 @@
+# Tests du moteur IA: estimation, scoring, dashboard et sauvegarde des resultats.
 from decimal import Decimal
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -22,6 +23,8 @@ from apps.properties.models import MarketListing
 
 
 class BaselineMLAlgorithmTests(SimpleTestCase):
+    # Verifie le comportement central des algorithmes ML utilises par le backend.
+    # Ces tests couvrent estimations, comparables et simulation d'investissement.
     def test_estimate_from_comparables_uses_weighted_market_price(self):
         listings = [
             self._listing(1, "Casablanca", "Maarif", Decimal("900000"), Decimal("90")),
@@ -171,6 +174,8 @@ class BaselineMLAlgorithmTests(SimpleTestCase):
         self.assertIn("projected_exit_value", result)
 
     def _listing(self, pk, city, district, price, area, asset_type="apartment"):
+        # Construit un faux listing simple pour alimenter les tests algorithmiques.
+        # Le helper evite de dupliquer la meme structure dans chaque scenario.
         now = timezone.now()
         return SimpleNamespace(
             id=pk,
@@ -191,7 +196,11 @@ class BaselineMLAlgorithmTests(SimpleTestCase):
 
 @override_settings(PUBLIC_DEMO_ACCESS=True)
 class MarketValuationApiTests(TestCase):
+    # Verifie l'endpoint d'estimation de marche et la sauvegarde des valuations.
+    # La suite controle aussi la serialisation JSON du payload modele stocke.
     def setUp(self):
+        # Prepare une organisation visible et un lot de comparables de marche.
+        # Les tests peuvent ensuite evaluer l'endpoint IA sur un jeu de donnees stable.
         self.organization = Organization.objects.create(name="SmartEstate Demo Org")
         now = timezone.now()
 
@@ -252,7 +261,11 @@ class MarketValuationApiTests(TestCase):
 
 @override_settings(PUBLIC_DEMO_ACCESS=False)
 class DashboardOverviewApiTests(TestCase):
+    # Verifie les regles de calcul de l'endpoint dashboard overview.
+    # Les tests ciblent surtout les comportements conditionnels les plus couteux.
     def setUp(self):
+        # Prepare un agent authentifie et son organisation pour les scenarios dashboard.
+        # Cette base commune rend les tests de l'endpoint plus courts et plus lisibles.
         self.user_model = get_user_model()
         self.agent = self.user_model.objects.create_user(
             email="dashboard-agent@example.com",

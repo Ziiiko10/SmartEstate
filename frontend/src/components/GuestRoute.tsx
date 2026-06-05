@@ -1,3 +1,4 @@
+// Route reservee aux visiteurs: redirige les utilisateurs deja connectes.
 import type { PropsWithChildren } from "react";
 import { Navigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
@@ -12,6 +13,8 @@ export default function GuestRoute({
   children,
   redirectTo,
 }: GuestRouteProps) {
+  // Affiche un ecran public uniquement pour les visiteurs non connectes.
+  // Les utilisateurs deja authentifies sont rediriges vers leur espace naturel.
   const { isAuthenticated, isBootstrapping, user } = useAuth();
 
   if (isBootstrapping) {

@@ -1,3 +1,4 @@
+// Simulateur de scenarios: compare plusieurs strategies et enregistre la meilleure lecture.
 import { useEffect, useMemo, useState } from "react";
 import ImportedPageDocument from "../components/ImportedPageDocument";
 import { useAuth } from "../auth/AuthContext";
@@ -97,6 +98,7 @@ const strategyMeta: Record<
   },
 };
 
+// Convertit les valeurs heterogenes renvoyees par l'API en nombres fiables.
 function toNumber(value: ApiNumber | undefined) {
   if (value === null || value === undefined || value === "") {
     return 0;
@@ -105,6 +107,7 @@ function toNumber(value: ApiNumber | undefined) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+// Formate les montants financiers des differentes strategies.
 function formatMoney(value: ApiNumber | undefined, compact = false) {
   const amount = toNumber(value);
   if (compact && Math.abs(amount) >= 1_000_000) {
@@ -119,6 +122,7 @@ function formatMoney(value: ApiNumber | undefined, compact = false) {
   })} DH`;
 }
 
+// Uniformise l'affichage des taux et TRI.
 function formatPercent(value: ApiNumber | undefined) {
   return `${toNumber(value).toLocaleString("fr-MA", {
     maximumFractionDigits: 1,
@@ -126,6 +130,7 @@ function formatPercent(value: ApiNumber | undefined) {
   })}%`;
 }
 
+// Formate les multiples de capitaux propres pour la comparaison des strategies.
 function formatMultiple(value: ApiNumber | undefined) {
   const amount = toNumber(value);
   if (!amount) {
@@ -137,6 +142,7 @@ function formatMultiple(value: ApiNumber | undefined) {
   })}x`;
 }
 
+// Rend les dates d'enregistrement lisibles dans l'historique.
 function formatDate(value: string) {
   if (!value) {
     return "N/A";
@@ -147,11 +153,13 @@ function formatDate(value: string) {
   }).format(new Date(value));
 }
 
+// Convertit une saisie texte en nombre exploitable pour le payload de simulation.
 function parseFormNumber(value: string) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+// Derive le payload propre a chaque strategie a partir du formulaire commun.
 function buildScenarioPayload(form: ScenarioForm, strategy: StrategyKey) {
   const base = {
     annual_expense_rate: parseFormNumber(form.annual_expense_rate),
@@ -193,10 +201,12 @@ function buildScenarioPayload(form: ScenarioForm, strategy: StrategyKey) {
   return base;
 }
 
+// Genere une cle de cache stable pour chaque combinaison strategie / hypothese.
 function scenarioCacheKey(strategy: StrategyKey, payload: ReturnType<typeof buildScenarioPayload>) {
   return `ml-scenario:${strategy}:${JSON.stringify(payload)}`;
 }
 
+// Classe les strategies selon le TRI, puis le profit total si le TRI est absent.
 function strategySortScore(simulation: ScenarioSimulationResponse | null) {
   if (!simulation) {
     return -Infinity;
@@ -208,6 +218,7 @@ function strategySortScore(simulation: ScenarioSimulationResponse | null) {
   return toNumber(simulation.total_profit);
 }
 
+// Coordonne la simulation multi-strategies et la sauvegarde des scenarios en base.
 export default function ScenarioSimulatorMarocPage() {
   const { token } = useAuth();
   const [form, setForm] = useState<ScenarioForm>(defaultForm);
@@ -224,9 +235,11 @@ export default function ScenarioSimulatorMarocPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
 
+  // Charge le contexte d'organisation et l'historique des scenarios sauvegardes.
   useEffect(() => {
     let active = true;
 
+    // Recupere les organisations visibles et les scenarios deja enregistres.
     async function loadBaseData() {
       try {
         const [organizationPayload, scenarioPayload] = await Promise.all([
@@ -255,6 +268,7 @@ export default function ScenarioSimulatorMarocPage() {
     };
   }, [token]);
 
+  // Relance automatiquement les trois simulations apres une courte temporisation de saisie.
   useEffect(() => {
     let active = true;
     const timeoutId = window.setTimeout(() => {
@@ -320,11 +334,13 @@ export default function ScenarioSimulatorMarocPage() {
     };
   }, [form, token]);
 
+  // Met a jour un champ du formulaire et efface les anciens messages de sauvegarde.
   function updateField<K extends keyof ScenarioForm>(field: K, value: ScenarioForm[K]) {
     setSaveMessage("");
     setForm((current) => ({ ...current, [field]: value }));
   }
 
+  // Identifie a tout moment la strategie la mieux notee selon les resultats courants.
   const bestStrategy = useMemo(
     () =>
       strategyOrder.reduce((best, current) =>
@@ -341,6 +357,7 @@ export default function ScenarioSimulatorMarocPage() {
     Object.values(simulations).every((simulation) => simulation === null) &&
     !error;
 
+  // Transforme les postes financiers du scenario actif en barres comparables.
   const projectionBars = useMemo(() => {
     if (!activeSimulation) {
       return [];
@@ -361,6 +378,7 @@ export default function ScenarioSimulatorMarocPage() {
     }));
   }, [activeSimulation]);
 
+  // Enregistre le scenario actuellement selectionne dans la base backend.
   async function saveScenario() {
     if (!activeSimulation) {
       setSaveMessage("Aucune simulation prête à sauvegarder.");
@@ -757,6 +775,7 @@ export default function ScenarioSimulatorMarocPage() {
   );
 }
 
+// Champ numerique avec unite reutilise dans la grille d'hypotheses.
 function Field({
   label,
   onChange,
@@ -792,6 +811,7 @@ function Field({
   );
 }
 
+// Badge compact pour les resultats d'un scenario.
 function DataPill({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-xl bg-surface-container-low px-4 py-3">
@@ -801,6 +821,7 @@ function DataPill({ label, value }: { label: string; value: string }) {
   );
 }
 
+// Ligne de detail pour les panneaux de reperes rapides.
 function DataRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-center justify-between gap-4 border-b border-outline-variant/20 pb-4 text-sm">

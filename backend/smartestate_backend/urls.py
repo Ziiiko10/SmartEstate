@@ -1,3 +1,4 @@
+# Routeur principal du backend: expose l'admin Django, l'API et les endpoints metier.
 from django.contrib import admin
 from django.urls import include, path
 from rest_framework import status
@@ -24,10 +25,14 @@ from smartestate_backend.health import check_cache, check_database
 
 
 class HealthcheckView(APIView):
+    # Expose un endpoint public de verification de sante du backend.
+    # Il consolide l'etat de la base et du cache dans une seule reponse simple.
     permission_classes = [AllowAny]
     authentication_classes = []
 
     def get(self, request):
+        # Construit la reponse de sante a partir des dependances critiques.
+        # Le code HTTP passe en 503 des qu'un service obligatoire est en erreur.
         database = check_database()
         cache = check_cache()
 

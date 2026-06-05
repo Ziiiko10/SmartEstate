@@ -1,3 +1,5 @@
+// Parametres admin: centralise quelques reglages globaux de la plateforme.
+// La page fonctionne ici comme une maquette editable locale.
 import { FormEvent, useState } from "react";
 import ImportedPageDocument from "../components/ImportedPageDocument";
 
@@ -23,14 +25,20 @@ const defaultSettings: SettingsForm = {
 };
 
 export default function AdminSettingsPage() {
+  // Affiche les reglages globaux de la plateforme cote administration.
+  // La page permet d'editer un formulaire local avant une persistance future.
   const [form, setForm] = useState(defaultSettings);
   const [message, setMessage] = useState("");
 
   function updateField<K extends keyof SettingsForm>(field: K, value: SettingsForm[K]) {
+    // Met a jour un champ precis du formulaire de parametres.
+    // Le helper garde la logique immutable de mise a jour a un seul endroit.
     setForm((current) => ({ ...current, [field]: value }));
   }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    // Intercepte l'envoi du formulaire et affiche un message de confirmation.
+    // La persistance reelle pourra etre branchee ici plus tard.
     event.preventDefault();
     setMessage("Paramètres enregistrés dans la maquette d'administration.");
   }
@@ -86,6 +94,8 @@ export default function AdminSettingsPage() {
 }
 
 function Field({ label, onChange, value }: { label: string; onChange: (value: string) => void; value: string }) {
+  // Rend un champ texte compact pour les differentes options de configuration.
+  // La logique de mise a jour reste delegatee au parent via onChange.
   return (
     <label className="block">
       <span className="mb-2 block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">{label}</span>

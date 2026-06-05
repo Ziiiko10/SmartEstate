@@ -1,5 +1,7 @@
+// Gestion des membres et des roles de l'organisation.
 import { useEffect, useMemo, useState } from "react";
 import ImportedPageDocument from "../components/ImportedPageDocument";
+import { DataRow, MetricCard } from "../components/DashboardWidgets";
 import { useAuth } from "../auth/AuthContext";
 import { DashboardPageLoader } from "../components/LoadingState";
 import { apiRequest, getErrorMessage } from "../lib/api";
@@ -50,6 +52,7 @@ const emptyOverview: DashboardOverview = {
   scenarios: 0,
 };
 
+// Rend les dates de membership lisibles dans le tableau et les cartes.
 function formatDate(value: string) {
   if (!value) {
     return "N/A";
@@ -61,6 +64,7 @@ function formatDate(value: string) {
   }).format(new Date(value));
 }
 
+// Traduit les roles organisationnels et applicatifs en libelles metier.
 function roleLabel(value: string) {
   const labels: Record<string, string> = {
     admin: "Administrateur",
@@ -75,6 +79,7 @@ function roleLabel(value: string) {
   return labels[value] ?? value;
 }
 
+// Produit un indicateur d'activite recente a partir des horodatages de mise a jour.
 function relativeDate(value: string) {
   if (!value) {
     return "Aucune activité";
@@ -88,6 +93,7 @@ function relativeDate(value: string) {
   return formatDate(value);
 }
 
+// Orchestre l'annuaire des membres, les filtres et le contexte d'organisation.
 export default function TeamManagementPage() {
   const { token } = useAuth();
   const [memberships, setMemberships] = useState<MembershipRecord[]>([]);
@@ -99,9 +105,11 @@ export default function TeamManagementPage() {
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(true);
 
+  // Charge memberships, organisations et indicateurs globaux visibles dans l'espace courant.
   useEffect(() => {
     let active = true;
 
+    // Rassemble les donnees necessaires a la vue equipe en une seule requete logique.
     async function loadPage() {
       setIsLoading(true);
       setError("");
@@ -138,6 +146,7 @@ export default function TeamManagementPage() {
     };
   }, [token]);
 
+  // Filtre les memberships selon la recherche libre, l'organisation et le role.
   const filteredMemberships = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
 
@@ -179,6 +188,7 @@ export default function TeamManagementPage() {
     overview.portfolios === 0 &&
     !error;
 
+  // Calcule une repartition simple des profils utilisateurs visibles.
   const roleBreakdown = useMemo(() => {
     const counts = new Map<string, number>();
     for (const membership of memberships) {
@@ -467,23 +477,5 @@ export default function TeamManagementPage() {
         )}
       </main>
     </ImportedPageDocument>
-  );
-}
-
-function MetricCard({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-2xl bg-surface-container-lowest p-6 shadow-[0_12px_40px_rgba(26,28,29,0.06)]">
-      <p className="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">{label}</p>
-      <p className="mt-3 text-3xl font-headline font-extrabold text-primary">{value}</p>
-    </div>
-  );
-}
-
-function DataRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-center justify-between gap-4 border-b border-white/10 pb-4 text-sm">
-      <span className="text-primary-fixed">{label}</span>
-      <span className="font-bold text-white">{value}</span>
-    </div>
   );
 }

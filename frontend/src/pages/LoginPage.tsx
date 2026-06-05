@@ -1,3 +1,4 @@
+// Ecran de connexion: saisie des identifiants, demo accounts et redirection par role.
 import { type FormEvent, useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
@@ -30,6 +31,7 @@ const supportHref = buildMailtoHref(
   "Bonjour,\n\nJ'ai besoin d'aide pour recuperer l'acces a mon compte SmartEstate.\n\nMerci.",
 );
 
+// Orchestre l'authentification, la prefill demo et la redirection apres connexion.
 export default function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -43,6 +45,7 @@ export default function LoginPage() {
 
   const routeState = (location.state as LoginRedirectState | null) ?? null;
 
+  // Reprend automatiquement les identifiants demo quand la navigation le demande.
   useEffect(() => {
     if (!routeState?.prefillDemo) {
       return;
@@ -53,6 +56,7 @@ export default function LoginPage() {
     setHint("Les identifiants de demonstration ont ete pre-remplis.");
   }, [routeState?.prefillDemo]);
 
+  // Envoie les identifiants au backend puis redirige vers l'espace adapte au role.
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
@@ -73,13 +77,7 @@ export default function LoginPage() {
     }
   }
 
-  function fillDemoCredentials(provider: "Google" | "LinkedIn") {
-    setEmail(DEMO_CREDENTIALS.email);
-    setPassword(DEMO_CREDENTIALS.password);
-    setHint(`Mode demonstration ${provider} prepare avec le compte de test.`);
-    setError(null);
-  }
-
+  // Charge rapidement les identifiants associes a chaque interface de test.
   function fillRoleCredentials(account: keyof typeof DEMO_ACCOUNTS) {
     const selectedAccount = DEMO_ACCOUNTS[account];
     setEmail(selectedAccount.email);
@@ -246,44 +244,6 @@ export default function LoginPage() {
                 <span className="material-symbols-outlined text-base">arrow_forward</span>
               </button>
             </form>
-
-            <div className="relative my-10">
-              <div aria-hidden="true" className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-outline-variant/20" />
-              </div>
-              <div className="relative flex justify-center text-xs uppercase tracking-widest font-bold">
-                <span className="bg-surface-container-lowest px-4 text-outline font-label">
-                  Ou continuer avec
-                </span>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <button
-                className="flex items-center justify-center gap-3 py-3 px-4 bg-surface-container-low hover:bg-surface-container-high transition-colors rounded-lg font-label text-sm font-bold text-on-surface border border-outline-variant/5"
-                type="button"
-                data-disable-prototype-actions="true"
-                onClick={() => fillDemoCredentials("Google")}
-              >
-                <img
-                  alt="Google Logo"
-                  className="w-5 h-5"
-                  src="https://lh3.googleusercontent.com/aida-public/AB6AXuCLyaqeIBSkpbKWSLHGHm69ji9xXoI-O30X-Z0vqt6oT75vBgTIMAatM5RyTnMpcSlLORC3NDRL6v_Fhn4jcXZzGfqewssDpFl1AlC5eRsQOpqHifzjYwn-giXSXwZE8lk1b1FRlQwP_rvFnVGajuJtlgcCohuuUr7nXM5O4bAXUlH2tSqlAPeEcgVedRsIgnoI9-190XQoxY9n-uPJ9KbH7Gbx7H8yrsHq8HW523KfYxwk9DrFr6K1-FC8QupCTUvit-sBR7VvxHmL"
-                />
-                Google
-              </button>
-              <button
-                className="flex items-center justify-center gap-3 py-3 px-4 bg-surface-container-low hover:bg-surface-container-high transition-colors rounded-lg font-label text-sm font-bold text-on-surface border border-outline-variant/5"
-                type="button"
-                data-disable-prototype-actions="true"
-                onClick={() => fillDemoCredentials("LinkedIn")}
-              >
-                <svg className="w-5 h-5 text-[#0077b5]" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z" />
-                </svg>
-                LinkedIn
-              </button>
-            </div>
 
             <div className="mt-8 rounded-2xl border border-outline-variant/10 bg-white px-5 py-5">
               <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-on-surface-variant">

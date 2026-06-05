@@ -1,3 +1,4 @@
+# Tests du module biens: parsing ETL, scraping et exposition API.
 from decimal import Decimal
 from http.client import IncompleteRead
 
@@ -15,6 +16,8 @@ from apps.properties.models import MarketListing
 
 
 class MarketListingParserTests(SimpleTestCase):
+    # Verifie les helpers de parsing et le comportement general des scrapers.
+    # Cette suite couvre surtout les details critiques d'extraction de donnees.
     def test_sale_price_parser_ignores_credit_monthly_payment(self):
         price, _, period = parse_price("1 250 000 DH 6 947 DH / mois", "sale")
 
@@ -138,21 +141,31 @@ class MarketListingParserTests(SimpleTestCase):
 
 
 class IncrementalTestScraper(BaseMarketScraper):
+    # Fournit un scraper minimaliste dedie aux tests du mode incremental.
+    # Il permet de simuler des URLs connues et nouvelles sans dependre du reseau.
     source = "test"
     default_url = "https://example.com/index"
 
     def extract_listing_urls(self, html: str, base_url: str) -> list[tuple[str, str]]:
+        # Retourne un jeu fixe d'URLs pour maitriser totalement le scenario de test.
+        # Une URL est connue d'avance et l'autre doit etre effectivement traitee.
         return [
             ("https://example.com/known", "Known listing"),
             ("https://example.com/new", "New listing"),
         ]
 
     def parse_listing(self, html: str, url: str, title_hint: str = "") -> ScrapedListing:
+        # Retourne une annonce minimale suffisante pour le test incremental.
+        # Le parser est volontairement simple car le scenario cible le flux de controle.
         return ScrapedListing(source=self.source, url=url, title=title_hint)
 
 
 class MarketListingApiTests(TestCase):
+    # Verifie le format et les filtres exposes par l'API des annonces de marche.
+    # Les tests protegent notamment la pagination et les champs derives image/prix.
     def setUp(self):
+        # Prepare un jeu d'annonces en base pour les scenarios API de cette suite.
+        # Les differents tests peuvent ensuite interroger l'endpoint sans doublonner les seeds.
         now = timezone.now()
         for index in range(3):
             MarketListing.objects.create(

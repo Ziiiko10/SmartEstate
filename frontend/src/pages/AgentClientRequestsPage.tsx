@@ -1,3 +1,5 @@
+// Demandes clients agent: centralise le suivi commercial d'un portefeuille de prospects.
+// La page illustre un tableau de pilotage simple avec statuts editables localement.
 import { useState } from "react";
 import ImportedPageDocument from "../components/ImportedPageDocument";
 import { formatDh } from "../lib/formatters";
@@ -14,9 +16,13 @@ const initialRequests = [
 ];
 
 export default function AgentClientRequestsPage() {
+  // Affiche les demandes clients affectees a un agent immobilier.
+  // Le composant sert surtout de tableau de suivi operationnel.
   const [requests, setRequests] = useState(initialRequests);
 
   function updateStatus(id: number, status: string) {
+    // Met a jour localement le statut d'une demande client.
+    // Cette action permet de simuler le cycle de traitement commercial.
     setRequests((current) => current.map((request) => (request.id === id ? { ...request, status } : request)));
   }
 

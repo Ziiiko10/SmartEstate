@@ -1,3 +1,4 @@
+# Migration qui ajoute l'image de profil sur le modele utilisateur.
 from django.db import migrations, models
 
 

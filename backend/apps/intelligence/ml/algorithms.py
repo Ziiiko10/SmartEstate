@@ -1,3 +1,4 @@
+# Algorithmes de calcul et de prediction utilises par le moteur IA.
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -9,10 +10,16 @@ from typing import Iterable
 from django.utils import timezone
 
 
+
+# Constantes utilisées pour arrondir les montants et les pourcentages.
+# MONEY = précision des prix ; PERCENT = précision des scores et ratios.
 MONEY = Decimal("0.01")
 PERCENT = Decimal("0.01")
 
 
+
+# Classe de données qui représente une annonce immobilière comparable au bien étudié.
+# Elle regroupe les informations affichables : prix, surface, prix/m², ville, quartier, images et score de similarité.
 @dataclass
 class Comparable:
     id: int | None
@@ -30,6 +37,9 @@ class Comparable:
     similarity_score: Decimal
 
 
+
+# Classe de données utilisée pour préparer les lignes d’apprentissage du modèle.
+# Chaque ligne contient les caractéristiques importantes d’une annonce et son prix au m².
 @dataclass
 class TrainingRow:
     city: str
@@ -42,6 +52,9 @@ class TrainingRow:
     last_seen_at: object | None = None
 
 
+
+# Convertit une valeur reçue depuis le formulaire ou la base de données en Decimal.
+# Si la valeur est vide ou invalide, la fonction retourne la valeur par défaut.
 def to_decimal(value, default: Decimal | None = None) -> Decimal | None:
     if value is None or value == "":
         return default
@@ -51,22 +64,34 @@ def to_decimal(value, default: Decimal | None = None) -> Decimal | None:
         return default
 
 
+
+# Arrondit un montant monétaire à deux chiffres après la virgule.
+# Cela permet d’obtenir des prix propres et homogènes dans les résultats.
 def quantize_money(value: Decimal | None) -> Decimal | None:
     if value is None:
         return None
     return value.quantize(MONEY)
 
 
+
+# Arrondit un pourcentage à deux chiffres après la virgule.
+# Utilisée pour les scores, rendements, ratios et indicateurs financiers.
 def quantize_percent(value: Decimal | None) -> Decimal | None:
     if value is None:
         return None
     return value.quantize(PERCENT)
 
 
+
+# Limite une valeur entre une borne minimale et une borne maximale.
+# Exemple : empêcher un score de dépasser 100 ou de devenir négatif.
 def bounded(value: Decimal, minimum: Decimal, maximum: Decimal) -> Decimal:
     return max(minimum, min(maximum, value))
 
 
+
+# Calcule la médiane d’une liste de valeurs Decimal.
+# La médiane est plus robuste qu’une moyenne lorsqu’il existe des prix extrêmes.
 def median(values: list[Decimal]) -> Decimal | None:
     if not values:
         return None
@@ -77,6 +102,9 @@ def median(values: list[Decimal]) -> Decimal | None:
     return (ordered[midpoint - 1] + ordered[midpoint]) / Decimal("2")
 
 
+
+# Calcule un percentile par interpolation linéaire.
+# Exemple : le 25e percentile sert à obtenir le quart inférieur des prix.
 def percentile(values: list[Decimal], percent: Decimal) -> Decimal | None:
     if not values:
         return None
@@ -90,6 +118,9 @@ def percentile(values: list[Decimal], percent: Decimal) -> Decimal | None:
     return ordered[lower] + (ordered[upper] - ordered[lower]) * fraction
 
 
+
+# Supprime les valeurs aberrantes avec la méthode IQR.
+# Elle garde les prix situés dans l’intervalle [Q1 - 1.5 IQR, Q3 + 1.5 IQR].
 def remove_iqr_outliers(values: list[Decimal]) -> list[Decimal]:
     if len(values) < 4:
         return values
@@ -104,6 +135,9 @@ def remove_iqr_outliers(values: list[Decimal]) -> list[Decimal]:
     return filtered or values
 
 
+
+# Calcule une moyenne pondérée.
+# Chaque valeur contribue selon son poids, ce qui permet de donner plus d’importance aux biens les plus similaires.
 def weighted_average(values: list[tuple[Decimal, Decimal]]) -> Decimal | None:
     numerator = sum(value * weight for value, weight in values)
     denominator = sum(weight for _, weight in values)
@@ -112,16 +146,25 @@ def weighted_average(values: list[tuple[Decimal, Decimal]]) -> Decimal | None:
     return numerator / denominator
 
 
+
+# Normalise un texte avant comparaison : suppression des espaces inutiles et passage en minuscules robustes.
+# Cela évite les différences dues aux majuscules/minuscules ou aux espaces.
 def normalize(value: str) -> str:
     return (value or "").strip().casefold()
 
 
+
+# Arrondit une valeur optionnelle si elle existe.
+# Si la valeur est None, la fonction retourne None sans erreur.
 def quantize_optional(value: Decimal | None, quantum: Decimal) -> Decimal | None:
     if value is None:
         return None
     return value.quantize(quantum)
 
 
+
+# Prépare le résultat d’un modèle pour l’envoyer au frontend ou l’enregistrer.
+# Elle garde uniquement les champs importants : méthode, statut, estimation, confiance, taille d’échantillon et message.
 def serialize_model_result(result: dict) -> dict:
     return {
         "method": result.get("method"),
@@ -134,6 +177,9 @@ def serialize_model_result(result: dict) -> dict:
     }
 
 
+
+# Récupère les images d’une annonce.
+# La fonction lit d’abord image_urls, puis cherche dans raw_payload si nécessaire.
 def listing_images(listing) -> list[str]:
     images = getattr(listing, "image_urls", None)
     if isinstance(images, list):
@@ -147,6 +193,9 @@ def listing_images(listing) -> list[str]:
     return [image for image in raw_images if isinstance(image, str) and image]
 
 
+
+# Calcule une similarité simple entre deux textes.
+# Elle sert à comparer les villes, quartiers ou types de biens même si les textes ne sont pas exactement identiques.
 def text_similarity(left: str, right: str) -> Decimal:
     normalized_left = normalize(left)
     normalized_right = normalize(right)
@@ -169,6 +218,9 @@ def text_similarity(left: str, right: str) -> Decimal:
     return Decimal(str(len(overlap) / len(union)))
 
 
+
+# Attribue un score selon la récence d’une annonce.
+# Une annonce récente reçoit un score plus élevé car elle reflète mieux le marché actuel.
 def listing_recency_score(listing) -> Decimal:
     last_seen_at = getattr(listing, "last_seen_at", None)
     if not last_seen_at:
@@ -190,6 +242,9 @@ def listing_recency_score(listing) -> Decimal:
     return Decimal("0.72")
 
 
+
+# Mesure la qualité/completude d’une annonce.
+# Plus l’annonce contient de champs importants et d’images, plus son score est élevé.
 def listing_completeness_score(listing) -> Decimal:
     checkpoints = [
         getattr(listing, "city", ""),
@@ -205,6 +260,9 @@ def listing_completeness_score(listing) -> Decimal:
     return bounded(Decimal("0.72") + ratio * Decimal("0.28") + image_bonus, Decimal("0.72"), Decimal("1.00"))
 
 
+
+# Calcule le score global de similarité entre le bien étudié et une annonce.
+# Le score combine type de bien, ville, quartier, surface, chambres, salles de bain, récence et complétude.
 def feature_similarity(subject: dict, listing) -> Decimal:
     score = Decimal("0")
     total = Decimal("0")
@@ -265,6 +323,9 @@ def feature_similarity(subject: dict, listing) -> Decimal:
     return bounded(adjusted, Decimal("0"), Decimal("1")).quantize(Decimal("0.0001"))
 
 
+
+# Construit la liste des annonces comparables au bien étudié.
+# La fonction filtre les annonces invalides, calcule le prix/m², vérifie les écarts et trie par similarité.
 def build_comparables(
     subject: dict,
     listings: Iterable,
@@ -334,6 +395,9 @@ def build_comparables(
     return comparables[:max_comparables]
 
 
+
+# Prépare les données d’apprentissage à partir des annonces du marché.
+# Elle transforme chaque annonce valide en TrainingRow et supprime les prix/m² aberrants.
 def collect_training_rows(
     listings: Iterable,
     *,
@@ -375,6 +439,9 @@ def collect_training_rows(
     return [row for row in rows if row.price_per_sqm in robust_prices]
 
 
+
+# Sélectionne les lignes d’apprentissage les plus proches du bien étudié.
+# Elle utilise le score de similarité et baisse progressivement le seuil pour obtenir assez de données.
 def select_training_rows_for_subject(
     subject: dict,
     rows: list[TrainingRow],
@@ -418,6 +485,9 @@ def select_training_rows_for_subject(
     return [row for _, row in scored_rows[:max_rows]]
 
 
+
+# Compte le nombre d’occurrences d’une catégorie dans les lignes d’apprentissage.
+# Exemple : nombre d’annonces par ville, quartier ou type de bien.
 def category_counts(rows: list[TrainingRow], key: str) -> dict[str, int]:
     counts: dict[str, int] = {}
     for row in rows:
@@ -428,6 +498,9 @@ def category_counts(rows: list[TrainingRow], key: str) -> dict[str, int]:
     return counts
 
 
+
+# Retourne les catégories les plus fréquentes pour une variable donnée.
+# Ces catégories sont utilisées ensuite comme variables indicatrices dans la régression.
 def top_categories(rows: list[TrainingRow], key: str, limit: int = 8) -> list[str]:
     counts = category_counts(rows, key)
     return [
@@ -436,10 +509,16 @@ def top_categories(rows: list[TrainingRow], key: str, limit: int = 8) -> list[st
     ]
 
 
+
+# Calcule le produit entre une matrice et un vecteur.
+# Utilisée pour appliquer les coefficients de régression aux variables du bien.
 def matrix_vector_product(matrix: list[list[float]], vector: list[float]) -> list[float]:
     return [sum(row[index] * vector[index] for index in range(len(vector))) for row in matrix]
 
 
+
+# Résout un système linéaire avec la méthode d’élimination de Gauss-Jordan.
+# Elle sert à calculer les coefficients de la régression Ridge sans bibliothèque externe.
 def solve_linear_system(matrix: list[list[float]], vector: list[float]) -> list[float] | None:
     size = len(vector)
     augmented = [matrix[row][:] + [vector[row]] for row in range(size)]
@@ -467,6 +546,9 @@ def solve_linear_system(matrix: list[list[float]], vector: list[float]) -> list[
     return [augmented[row][size] for row in range(size)]
 
 
+
+# Transforme les caractéristiques d’un bien en vecteur numérique pour la régression.
+# Le vecteur contient surface, log(surface), chambres, salles de bain et variables catégorielles.
 def build_regression_vector(
     *,
     area_sqm: Decimal | None,
@@ -499,6 +581,9 @@ def build_regression_vector(
     return vector
 
 
+
+# Calcule les coefficients d’une régression Ridge.
+# La régularisation alpha stabilise le modèle et limite les coefficients trop extrêmes.
 def ridge_coefficients(
     features: list[list[float]],
     targets: list[float],
@@ -525,6 +610,9 @@ def ridge_coefficients(
     return solve_linear_system(xtx, xty)
 
 
+
+# Estime la valeur du bien avec une régression hédonique Ridge.
+# Le modèle apprend le prix/m² à partir des caractéristiques du marché, puis multiplie par la surface du bien étudié.
 def estimate_with_hedonic_regression(
     subject: dict,
     rows: list[TrainingRow],
@@ -661,6 +749,9 @@ def estimate_with_hedonic_regression(
     }
 
 
+
+# Vérifie si une ligne d’apprentissage correspond au bien étudié selon un niveau de précision.
+# Les niveaux possibles sont : quartier+type, ville+type, ville, type de bien ou marché global.
 def row_matches_subject(row: TrainingRow, subject: dict, *, level: str) -> bool:
     subject_city = normalize(subject.get("city"))
     subject_district = normalize(subject.get("district"))
@@ -679,6 +770,9 @@ def row_matches_subject(row: TrainingRow, subject: dict, *, level: str) -> bool:
     return True
 
 
+
+# Estime la valeur avec une méthode de référence basée sur les segments du marché.
+# Elle prend la médiane du prix/m² du segment le plus précis disponible, avec un fallback plus général.
 def estimate_with_market_baseline(
     subject: dict,
     rows: list[TrainingRow],
@@ -765,6 +859,9 @@ def estimate_with_market_baseline(
     }
 
 
+
+# Estime la valeur avec une approche KNN pondérée par comparables.
+# Elle cherche les annonces les plus similaires et calcule une moyenne pondérée du prix/m².
 def estimate_from_comparables(
     subject: dict,
     listings: Iterable,
@@ -885,6 +982,9 @@ def estimate_from_comparables(
     }
 
 
+
+# Calcule le poids d’un modèle dans l’estimation finale.
+# Plus un modèle est fiable, local et basé sur assez de données, plus son poids est important.
 def ensemble_model_weight(result: dict) -> Decimal:
     method = result.get("method", "")
     confidence = to_decimal(result.get("confidence_score"), Decimal("0")) or Decimal("0")
@@ -927,6 +1027,9 @@ def ensemble_model_weight(result: dict) -> Decimal:
     return Decimal("0.10") * confidence_factor
 
 
+
+# Fonction principale du moteur IA d’estimation immobilière.
+# Elle combine trois modèles : comparables KNN, régression Ridge et baseline marché, puis produit une estimation finale.
 def estimate_with_ml_models(
     subject: dict,
     listings: Iterable,
@@ -1026,6 +1129,9 @@ def estimate_with_ml_models(
     }
 
 
+
+# Calcule un score d’opportunité d’investissement.
+# Le score combine décote par rapport au marché, rendement locatif et confiance de l’estimation.
 def score_investment_opportunity(subject: dict, sale_estimate: dict, rent_estimate: dict | None = None) -> dict:
     asking_price = to_decimal(subject.get("asking_price") or subject.get("price"))
     estimated_value = to_decimal(sale_estimate.get("estimated_value"))
@@ -1075,6 +1181,9 @@ def score_investment_opportunity(subject: dict, sale_estimate: dict, rent_estima
     }
 
 
+
+# Calcule la mensualité d’un crédit immobilier amortissable.
+# Elle utilise le capital emprunté, le taux annuel et la durée du prêt.
 def monthly_payment(principal: Decimal, annual_rate_percent: Decimal, years: int) -> Decimal:
     if principal <= 0 or years <= 0:
         return Decimal("0")
@@ -1086,6 +1195,9 @@ def monthly_payment(principal: Decimal, annual_rate_percent: Decimal, years: int
     return principal * monthly_rate * factor / (factor - 1)
 
 
+
+# Calcule le capital restant dû après un certain nombre de mois.
+# Elle simule mois par mois les intérêts et le remboursement du prêt.
 def remaining_principal(
     principal: Decimal,
     annual_rate_percent: Decimal,
@@ -1103,6 +1215,9 @@ def remaining_principal(
     return balance
 
 
+
+# Calcule le taux de rentabilité interne IRR/TRI à partir des flux de trésorerie.
+# La fonction utilise une recherche binaire pour trouver le taux qui annule la valeur actuelle nette.
 def irr(cashflows: list[Decimal]) -> Decimal | None:
     if not cashflows or not any(value < 0 for value in cashflows) or not any(value > 0 for value in cashflows):
         return None
@@ -1121,6 +1236,9 @@ def irr(cashflows: list[Decimal]) -> Decimal | None:
     return (low + high) / Decimal("2")
 
 
+
+# Simule un scénario complet d’investissement immobilier.
+# Elle calcule crédit, cash-flow, valeur de sortie, dette restante, profit total, multiple et TRI projeté.
 def simulate_investment_scenario(payload: dict) -> dict:
     purchase_price = to_decimal(payload.get("purchase_price"), Decimal("0")) or Decimal("0")
     down_payment = to_decimal(payload.get("down_payment"), Decimal("0")) or Decimal("0")

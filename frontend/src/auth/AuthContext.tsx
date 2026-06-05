@@ -1,3 +1,4 @@
+// Contexte d'authentification: gere session, connexion, inscription et profil courant.
 import {
   createContext,
   type PropsWithChildren,
@@ -46,7 +47,6 @@ type RegisterPayload = {
 
 type UpdateProfilePayload = {
   avatar_image: string;
-  email: string;
   full_name: string;
   phone_number: string;
 };
@@ -76,6 +76,8 @@ const DEMO_USER: AuthUser = {
 };
 
 function getStoredToken() {
+  // Recupere un token stocke en localStorage ou sessionStorage.
+  // L'ordre permet de privilegier une session persistante si elle existe.
   return (
     window.localStorage.getItem(LOCAL_STORAGE_TOKEN_KEY) ??
     window.sessionStorage.getItem(SESSION_STORAGE_TOKEN_KEY)
@@ -83,6 +85,8 @@ function getStoredToken() {
 }
 
 function storeToken(token: string, remember: boolean) {
+  // Stocke le token dans le bon espace de persistence selon le choix utilisateur.
+  // Un seul emplacement est garde actif pour eviter les collisions de session.
   window.localStorage.removeItem(LOCAL_STORAGE_TOKEN_KEY);
   window.sessionStorage.removeItem(SESSION_STORAGE_TOKEN_KEY);
 
@@ -95,11 +99,15 @@ function storeToken(token: string, remember: boolean) {
 }
 
 function clearStoredToken() {
+  // Supprime tout token conserve cote navigateur.
+  // Cette fonction est appelee lors du logout ou d'une session devenue invalide.
   window.localStorage.removeItem(LOCAL_STORAGE_TOKEN_KEY);
   window.sessionStorage.removeItem(SESSION_STORAGE_TOKEN_KEY);
 }
 
 export function AuthProvider({ children }: PropsWithChildren) {
+  // Fournit l'etat d'authentification et les actions de session a toute l'application.
+  // Le provider restaure aussi automatiquement une session existante au chargement.
   const [user, setUser] = useState<AuthUser | null>(null);
   const [token, setToken] = useState<null | string>(null);
   const [isBootstrapping, setIsBootstrapping] = useState(true);
@@ -108,6 +116,8 @@ export function AuthProvider({ children }: PropsWithChildren) {
     let isMounted = true;
 
     async function restoreSession() {
+      // Tente de restaurer la session depuis un token deja stocke.
+      // En cas d'echec, l'application revient sur un etat propre ou demo public.
       const storedToken = getStoredToken();
 
       if (!storedToken) {
@@ -158,6 +168,8 @@ export function AuthProvider({ children }: PropsWithChildren) {
   }, []);
 
   async function login(payload: LoginPayload) {
+    // Authentifie l'utilisateur puis memorise sa session cote navigateur.
+    // Un prefetch de la route d'accueil est lance pour fluidifier la transition.
     const response = await apiRequest<AuthResponse>("/auth/login/", {
       method: "POST",
       body: {
@@ -178,6 +190,8 @@ export function AuthProvider({ children }: PropsWithChildren) {
   }
 
   async function register(payload: RegisterPayload) {
+    // Cree un compte utilisateur puis ouvre immediatement sa session.
+    // Comme au login, la route cible est prefetchee des que le role est connu.
     const response = await apiRequest<AuthResponse>("/auth/register/", {
       method: "POST",
       body: {
@@ -201,6 +215,8 @@ export function AuthProvider({ children }: PropsWithChildren) {
   }
 
   async function updateProfile(payload: UpdateProfilePayload) {
+    // Met a jour le profil courant via l'API securisee.
+    // Les caches lies au profil et a la liste des utilisateurs sont invalides ensuite.
     if (!token) {
       throw new Error("Connectez-vous avec un compte authentifie pour modifier votre profil.");
     }
@@ -221,6 +237,8 @@ export function AuthProvider({ children }: PropsWithChildren) {
   }
 
   function logout() {
+    // Ferme la session en supprimant le token et en reinitialisant l'etat local.
+    // En mode demo public, un utilisateur factice reste disponible apres deconnexion.
     clearStoredToken();
     clearApiCache();
     startTransition(() => {
@@ -248,6 +266,8 @@ export function AuthProvider({ children }: PropsWithChildren) {
 }
 
 export function useAuth() {
+  // Retourne le contexte d'authentification deja initialise par AuthProvider.
+  // Une erreur explicite est levee si le hook est utilise hors provider.
   const context = useContext(AuthContext);
 
   if (!context) {

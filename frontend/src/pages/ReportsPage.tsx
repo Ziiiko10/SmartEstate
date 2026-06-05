@@ -1,7 +1,10 @@
+// Rapports operatifs et resume des indicateurs de suivi.
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import ImportedPageDocument from "../components/ImportedPageDocument";
 import { DashboardPageLoader } from "../components/LoadingState";
+import { DataPill } from "../components/PageWidgets";
+import { DataRow, MetricCard } from "../components/DashboardWidgets";
 import { useAuth } from "../auth/AuthContext";
 import { apiRequest, getErrorMessage } from "../lib/api";
 
@@ -84,6 +87,7 @@ const emptyOverview: DashboardOverview = {
   total_asset_value: 0,
 };
 
+// Convertit les valeurs mixtes de l'API en nombres stables pour les calculs.
 function toNumber(value: ApiNumber | undefined) {
   if (value === null || value === undefined || value === "") {
     return 0;
@@ -92,6 +96,7 @@ function toNumber(value: ApiNumber | undefined) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+// Formate les montants visibles dans les rapports et estimations.
 function formatMoney(value: ApiNumber | undefined, compact = false) {
   const amount = toNumber(value);
   if (compact && Math.abs(amount) >= 1_000_000) {
@@ -106,6 +111,7 @@ function formatMoney(value: ApiNumber | undefined, compact = false) {
   })} DH`;
 }
 
+// Harmonise l'affichage des ratios et scores.
 function formatPercent(value: ApiNumber | undefined) {
   return `${toNumber(value).toLocaleString("fr-MA", {
     maximumFractionDigits: 1,
@@ -113,6 +119,7 @@ function formatPercent(value: ApiNumber | undefined) {
   })}%`;
 }
 
+// Rend les dates backend lisibles dans l'interface de consultation.
 function formatDate(value: string) {
   if (!value) {
     return "N/A";
@@ -124,10 +131,12 @@ function formatDate(value: string) {
   }).format(new Date(value));
 }
 
+// Normalise le texte pour les recherches transverses sur rapports et estimations.
 function normalizeText(value: string | null | undefined) {
   return (value ?? "").trim().toLowerCase();
 }
 
+// Verifie la presence de tous les termes de recherche dans un enregistrement.
 function matchesSearchTerms(values: Array<string | null | undefined>, matchTerms: string[]) {
   if (matchTerms.length === 0) {
     return true;
@@ -137,6 +146,7 @@ function matchesSearchTerms(values: Array<string | null | undefined>, matchTerms
   return matchTerms.every((term) => haystack.includes(normalizeText(term)));
 }
 
+// Traduit le type technique de rapport en etiquette metier.
 function reportTypeLabel(value: string) {
   const labels: Record<string, string> = {
     financial: "Financier",
@@ -147,6 +157,7 @@ function reportTypeLabel(value: string) {
   return labels[value] ?? value;
 }
 
+// Traduit l'etat de generation du rapport pour les badges UI.
 function reportStatusLabel(value: string) {
   const labels: Record<string, string> = {
     archived: "Archivé",
@@ -156,6 +167,7 @@ function reportStatusLabel(value: string) {
   return labels[value] ?? value;
 }
 
+// Produit un resume lisible quand le rapport ne fournit pas encore de synthese explicite.
 function suggestionText(report: ReportRecord) {
   if (report.summary) {
     return report.summary;
@@ -172,6 +184,7 @@ function suggestionText(report: ReportRecord) {
     : "Rapport généré depuis les données de la plateforme SmartEstate.";
 }
 
+// Centralise les rapports backend et les estimations sauvegardees dans un seul cockpit.
 export default function ReportsPage() {
   const { token } = useAuth();
   const [overview, setOverview] = useState<DashboardOverview>(emptyOverview);
@@ -183,9 +196,11 @@ export default function ReportsPage() {
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(true);
 
+  // Charge les donnees de reporting et les KPI globaux visibles sur la page.
   useEffect(() => {
     let active = true;
 
+    // Interroge en parallele le dashboard, les rapports et les estimations en base.
     async function loadPage() {
       setIsLoading(true);
       setError("");
@@ -222,6 +237,7 @@ export default function ReportsPage() {
     };
   }, [token]);
 
+  // Genere les options de recherche groupees par organisation, portefeuille et actif.
   const searchOptions = useMemo<ReportSearchOption[]>(() => {
     const options: ReportSearchOption[] = [
       {
@@ -305,6 +321,7 @@ export default function ReportsPage() {
     [query, searchOptions],
   );
 
+  // Regroupe les options de recherche pour alimenter les optgroups du select.
   const groupedSearchOptions = useMemo(
     () =>
       searchOptions.reduce<Record<ReportSearchGroup, ReportSearchOption[]>>(
@@ -322,6 +339,7 @@ export default function ReportsPage() {
     [searchOptions],
   );
 
+  // Applique les filtres de type, de statut et de recherche textuelle aux rapports.
   const filteredReports = useMemo(() => {
     return reports.filter((report) => {
       if (selectedType !== "all" && report.report_type !== selectedType) {
@@ -344,6 +362,7 @@ export default function ReportsPage() {
     });
   }, [reports, selectedSearchOption, selectedStatus, selectedType]);
 
+  // Filtre les estimations sauvegardees avec la meme recherche globale.
   const filteredValuations = useMemo(() => {
     return valuations.filter((valuation) =>
       matchesSearchTerms(
@@ -743,32 +762,5 @@ export default function ReportsPage() {
         )}
       </main>
     </ImportedPageDocument>
-  );
-}
-
-function MetricCard({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-2xl bg-surface-container-lowest p-6 shadow-[0_12px_40px_rgba(26,28,29,0.06)]">
-      <p className="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">{label}</p>
-      <p className="mt-3 text-3xl font-headline font-extrabold text-primary">{value}</p>
-    </div>
-  );
-}
-
-function DataPill({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-xl bg-surface-container-low px-4 py-3">
-      <p className="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">{label}</p>
-      <p className="mt-1 font-bold text-primary">{value}</p>
-    </div>
-  );
-}
-
-function DataRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-center justify-between gap-4 border-b border-white/10 pb-4 text-sm">
-      <span className="text-primary-fixed">{label}</span>
-      <span className="font-bold text-white">{value}</span>
-    </div>
   );
 }

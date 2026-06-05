@@ -1,3 +1,4 @@
+# Remplit la base avec les comptes, equipes et donnees de demonstration.
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
@@ -11,10 +12,14 @@ from apps.properties.models import PropertyAsset
 
 
 class Command(BaseCommand):
+    # Cree ou remet a niveau les donnees de demonstration de la plateforme.
+    # La commande peuple les comptes, actifs, portefeuilles et objets IA associes.
     help = "Cree un jeu de donnees SmartEstate de demonstration."
     demo_password = "123456789"
 
     def handle(self, *args, **options):
+        # Orchestre la creation complete du jeu de donnees demo.
+        # La commande met a jour les enregistrements existants plutot que de les dupliquer.
         User = get_user_model()
 
         def sync_demo_user(
@@ -26,6 +31,8 @@ class Command(BaseCommand):
             is_staff: bool = False,
             is_superuser: bool = False,
         ):
+            # Cree ou met a jour un utilisateur demo selon son email.
+            # Ce helper centralise les champs obligatoires et la regeneration du token.
             user, _ = User.objects.get_or_create(email=email)
             user.full_name = full_name
             user.phone_number = phone_number

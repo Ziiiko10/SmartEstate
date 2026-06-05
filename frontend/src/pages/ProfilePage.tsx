@@ -1,5 +1,7 @@
+// Profil utilisateur: edition directe des champs, avatar et acces lies au role.
 import { type ChangeEvent, useEffect, useRef, useState } from "react";
 import ImportedPageDocument from "../components/ImportedPageDocument";
+import { EditableInfoCard, InfoCard } from "../components/PageWidgets";
 import UserAvatar from "../components/UserAvatar";
 import { useAuth } from "../auth/AuthContext";
 import { getErrorMessage } from "../lib/api";
@@ -12,11 +14,12 @@ const pageStyles = `.material-symbols-outlined {
         }`;
 
 export default function ProfilePage() {
+  // Affiche et permet de modifier le profil courant de l'utilisateur.
+  // Les informations sont chargees depuis le contexte d'auth puis sauvegardees via l'API.
   const { token, updateProfile, user } = useAuth();
   const navigation = getRoleNavigation(user?.role);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [fullName, setFullName] = useState(user?.full_name ?? "");
-  const [email, setEmail] = useState(user?.email ?? "");
   const [phoneNumber, setPhoneNumber] = useState(user?.phone_number ?? "");
   const [avatarImage, setAvatarImage] = useState(user?.avatar_image ?? "");
   const [error, setError] = useState<null | string>(null);
@@ -24,24 +27,25 @@ export default function ProfilePage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
+    // Resynchronise le formulaire local quand l'utilisateur courant change.
+    // Cela evite d'afficher des valeurs obsoletes apres un refresh de profil.
     setFullName(user?.full_name ?? "");
-    setEmail(user?.email ?? "");
     setPhoneNumber(user?.phone_number ?? "");
     setAvatarImage(user?.avatar_image ?? "");
-  }, [user?.avatar_image, user?.email, user?.full_name, user?.phone_number]);
+  }, [user?.avatar_image, user?.full_name, user?.phone_number]);
 
   const isDemoProfile = !token;
   const trimmedFullName = fullName.trim();
-  const trimmedEmail = email.trim();
   const trimmedPhoneNumber = phoneNumber.trim();
   const normalizedAvatarImage = avatarImage.trim();
   const hasChanges =
     trimmedFullName !== (user?.full_name ?? "") ||
-    trimmedEmail !== (user?.email ?? "") ||
     trimmedPhoneNumber !== (user?.phone_number ?? "") ||
     normalizedAvatarImage !== (user?.avatar_image ?? "");
 
   async function handleSave() {
+    // Valide puis enregistre les modifications du profil courant.
+    // Les messages de succes et d'erreur sont geres localement pour la page.
     setError(null);
     setSuccess(null);
 
@@ -50,17 +54,11 @@ export default function ProfilePage() {
       return;
     }
 
-    if (!trimmedEmail) {
-      setError("L'adresse email est obligatoire.");
-      return;
-    }
-
     setIsSubmitting(true);
 
     try {
       await updateProfile({
         avatar_image: normalizedAvatarImage,
-        email: trimmedEmail,
         full_name: trimmedFullName,
         phone_number: trimmedPhoneNumber,
       });
@@ -73,8 +71,9 @@ export default function ProfilePage() {
   }
 
   function resetForm() {
+    // Restaure le formulaire sur les valeurs actuellement connues du compte.
+    // Le champ fichier est aussi nettoye pour repartir d'un etat sain.
     setFullName(user?.full_name ?? "");
-    setEmail(user?.email ?? "");
     setPhoneNumber(user?.phone_number ?? "");
     setAvatarImage(user?.avatar_image ?? "");
     setError(null);
@@ -85,10 +84,14 @@ export default function ProfilePage() {
   }
 
   function handleAvatarPickerClick() {
+    // Ouvre le selecteur de fichier pour choisir une nouvelle image de profil.
+    // Le clic est relaye vers l'input masque dedie a l'upload.
     fileInputRef.current?.click();
   }
 
   function handleAvatarRemove() {
+    // Supprime l'image actuellement previsualisee dans le formulaire.
+    // Le composant reste en mode brouillon tant que l'utilisateur n'enregistre pas.
     setAvatarImage("");
     setError(null);
     setSuccess(null);
@@ -98,6 +101,8 @@ export default function ProfilePage() {
   }
 
   function handleAvatarChange(event: ChangeEvent<HTMLInputElement>) {
+    // Valide puis charge localement la nouvelle image choisie par l'utilisateur.
+    // Seuls quelques formats et une taille maximale sont acceptes.
     const file = event.target.files?.[0];
 
     if (!file) {
@@ -204,15 +209,7 @@ export default function ProfilePage() {
                 value={fullName}
                 onChange={setFullName}
               />
-              <EditableInfoCard
-                disabled={isDemoProfile || isSubmitting}
-                label="Adresse email"
-                placeholder="nom@exemple.ma"
-                required
-                type="email"
-                value={email}
-                onChange={setEmail}
-              />
+              <InfoCard label="Adresse email" value={user?.email || "Email non renseigné"} />
               <EditableInfoCard
                 disabled={isDemoProfile || isSubmitting}
                 label="Téléphone"
@@ -221,9 +218,7 @@ export default function ProfilePage() {
                 value={phoneNumber}
                 onChange={setPhoneNumber}
               />
-              <InfoCard label="Statut" value={user?.is_active ? "Compte actif" : "Compte désactivé"} />
               <InfoCard label="Création du compte" value={formatDateTime(user?.created_at || "")} />
-              <InfoCard label="Parcours recommandé" value={navigation[0]?.label || "Tableau de bord"} />
             </div>
 
             <section className="mt-8 rounded-2xl bg-surface-container-low p-6">
@@ -316,47 +311,5 @@ export default function ProfilePage() {
         </section>
       </main>
     </ImportedPageDocument>
-  );
-}
-
-function InfoCard({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-2xl bg-surface-container-low p-5">
-      <p className="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">{label}</p>
-      <p className="mt-3 text-lg font-bold text-primary">{value}</p>
-    </div>
-  );
-}
-
-function EditableInfoCard({
-  disabled = false,
-  label,
-  onChange,
-  placeholder,
-  required = false,
-  type = "text",
-  value,
-}: {
-  disabled?: boolean;
-  label: string;
-  onChange: (value: string) => void;
-  placeholder?: string;
-  required?: boolean;
-  type?: string;
-  value: string;
-}) {
-  return (
-    <label className="rounded-2xl bg-surface-container-low p-5 block">
-      <span className="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">{label}</span>
-      <input
-        className="mt-3 w-full rounded-xl border border-outline-variant/20 bg-white px-4 py-3 text-sm text-on-surface shadow-sm focus:border-secondary focus:outline-none focus:ring-2 focus:ring-secondary/15 disabled:cursor-not-allowed disabled:opacity-60"
-        disabled={disabled}
-        placeholder={placeholder}
-        required={required}
-        type={type}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-      />
-    </label>
   );
 }

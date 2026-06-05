@@ -1,3 +1,5 @@
+// Historique utilisateur: resume quelques actions recentes visibles dans le parcours.
+// Cette page reste pour l'instant basee sur des donnees locales de demonstration.
 import ImportedPageDocument from "../components/ImportedPageDocument";
 import { useAuth } from "../auth/AuthContext";
 import { formatDateTime, formatDh } from "../lib/formatters";
@@ -35,6 +37,8 @@ const historyEntries = [
 ];
 
 export default function UserHistoryPage() {
+  // Affiche un historique simple des actions et analyses utilisateur.
+  // Cette version repose sur des donnees maquette pour illustrer le flux.
   const { user } = useAuth();
 
   return (

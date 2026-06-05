@@ -1,3 +1,4 @@
+# Pipeline ETL: nettoie, normalise et prepare les annonces avant l'insertion.
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -17,6 +18,8 @@ from apps.properties.models import MarketListing
 
 @dataclass
 class ImportStats:
+    # Regroupe les compteurs d'un cycle complet de scraping/import.
+    # Cette structure rend le reporting final plus lisible pour l'API et la CLI.
     extracted: int = 0
     created: int = 0
     updated: int = 0
@@ -32,6 +35,8 @@ SCRAPER_CLASSES = {
 
 
 def selected_sources(source: str) -> list[str]:
+    # Retourne la liste concrete des sources a traiter pour cette execution.
+    # Le mot-cle all est developpe ici pour simplifier le reste du pipeline.
     if source == "all":
         return ["avito", "mubawab"]
     return [source]
@@ -52,6 +57,8 @@ def run_market_scrape(
     avito_url: str = AVITO_DEFAULT_URL,
     mubawab_url: str = MUBAWAB_DEFAULT_URL,
 ) -> ImportStats:
+    # Orchestre un cycle complet de scraping puis d'import en base.
+    # La fonction gere la selection des sources, les filtres et le cumul des statistiques.
     stats = ImportStats()
     wanted_city = normalize_for_match(city)
     wanted_transaction = normalize_for_match(transaction_type)
@@ -106,6 +113,8 @@ def run_market_scrape(
 
 
 def upsert_market_listing(listing: ScrapedListing) -> bool:
+    # Cree ou met a jour une annonce de marche selon sa source et son URL.
+    # La fonction retourne True uniquement quand une nouvelle ligne a ete creee.
     now = timezone.now()
     _, created = MarketListing.objects.update_or_create(
         source=listing.source,

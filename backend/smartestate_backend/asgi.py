@@ -1,3 +1,4 @@
+# Entree ASGI utilisee par les serveurs asynchrones et les departs runtime.
 import os
 
 from django.core.asgi import get_asgi_application

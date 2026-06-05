@@ -1,7 +1,10 @@
+// Catalogue des pages: regroupe les ecrans disponibles dans la maquette.
 import { Link } from "react-router-dom";
 import { catalogPages } from "../data/catalogPages";
 
 export default function PageCatalogPage() {
+  // Liste les pages catalogue et leurs apercus de demonstration.
+  // Cette page sert surtout de hub visuel pour parcourir les prototypes disponibles.
   return (
     <main className="page-catalog-page">
       <section className="page-catalog-hero">

@@ -1,5 +1,7 @@
+// Statistiques dédiées a l'activite de l'agent immobilier.
 import { useEffect, useState } from "react";
 import ImportedPageDocument from "../components/ImportedPageDocument";
+import { DataRow, MetricCard } from "../components/DashboardWidgets";
 import { useAuth } from "../auth/AuthContext";
 import { apiRequest, getErrorMessage } from "../lib/api";
 import { formatDh } from "../lib/formatters";
@@ -41,14 +43,17 @@ const emptyOverview: DashboardOverview = {
   valuations: 0,
 };
 
+// Affiche les KPI et opportunites IA visibles depuis l'espace agent.
 export default function AgentStatisticsPage() {
   const { token } = useAuth();
   const [overview, setOverview] = useState<DashboardOverview>(emptyOverview);
   const [error, setError] = useState("");
 
+  // Charge la synthese agent enrichie des opportunites detectees par le backend.
   useEffect(() => {
     let active = true;
 
+    // Recupere le dashboard agent et fusionne la reponse avec des valeurs par defaut.
     async function loadOverview() {
       try {
         const payload = await apiRequest<DashboardOverview>(DASHBOARD_OVERVIEW_WITH_OPPORTUNITIES_PATH, { token });
@@ -145,23 +150,5 @@ export default function AgentStatisticsPage() {
         </section>
       </main>
     </ImportedPageDocument>
-  );
-}
-
-function MetricCard({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-2xl bg-white p-6 shadow-sm">
-      <p className="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">{label}</p>
-      <p className="mt-3 text-3xl font-headline font-extrabold text-primary">{value}</p>
-    </div>
-  );
-}
-
-function DataRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-center justify-between gap-4 border-b border-white/10 pb-4 text-sm">
-      <span className="text-primary-fixed">{label}</span>
-      <span className="font-bold text-white">{value}</span>
-    </div>
   );
 }

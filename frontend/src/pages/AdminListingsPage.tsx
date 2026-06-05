@@ -1,5 +1,7 @@
+// Liste des annonces ETL avec filtres et pagination de maintenance.
 import { useEffect, useMemo, useState } from "react";
 import ImportedPageDocument from "../components/ImportedPageDocument";
+import { MetricCard } from "../components/DashboardWidgets";
 import { useAuth } from "../auth/AuthContext";
 import { apiRequest, getErrorMessage } from "../lib/api";
 import { formatDh, formatRelative } from "../lib/formatters";
@@ -32,10 +34,14 @@ type ListingPayload = {
 const ITEMS_PER_PAGE = 50;
 
 function buildListingsPath(page: number) {
+  // Construit le chemin API de la page d'annonces admin demandee.
+  // Le helper centralise la pagination pour les appels de donnees.
   return `/market-listings/?page=${page}&page_size=${ITEMS_PER_PAGE}`;
 }
 
 function getDefaultStatus(index: number) {
+  // Attribue un statut visuel de secours quand l'API ne fournit pas cet etat.
+  // La rotation permet de garder une maquette variee sans logique complexe.
   if (index % 3 === 0) {
     return "À valider";
   }
@@ -48,6 +54,8 @@ function getDefaultStatus(index: number) {
 }
 
 export default function AdminListingsPage() {
+  // Affiche la liste admin des annonces ETL avec pagination et actions de supervision.
+  // La page enrichit certaines lignes avec un statut de presentation local.
   const { token } = useAuth();
   const [listings, setListings] = useState<ListingRecord[]>([]);
   const [statuses, setStatuses] = useState<Record<number, string>>({});
@@ -59,13 +67,19 @@ export default function AdminListingsPage() {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    // Resynchronise le champ de navigation libre avec la page effective.
+    // Cela garde l'input coherent apres tout changement de pagination.
     setPageInput(String(page));
   }, [page]);
 
   useEffect(() => {
+    // Charge la tranche courante d'annonces ETL depuis le backend.
+    // Les statuts de presentation sont initialises au premier passage de chaque ligne.
     let active = true;
 
     async function loadListings() {
+      // Recupere la page demandee puis met a jour la liste visible.
+      // Les erreurs reseau sont converties en message lisible pour l'admin.
       setIsLoading(true);
       setError("");
 
@@ -116,15 +130,21 @@ export default function AdminListingsPage() {
   );
 
   function updateStatus(id: number, status: string) {
+    // Met a jour le statut local d'une annonce dans la maquette.
+    // Un message de confirmation est affiche pour rendre l'action visible.
     setStatuses((current) => ({ ...current, [id]: status }));
     setMessage(`Le statut de l'annonce a été mis à jour vers "${status}".`);
   }
 
   function goToPage(nextPage: number) {
+    // Borne puis applique un changement de page utilisateur.
+    // La navigation reste ainsi limitee au nombre total de pages connu.
     setPage(Math.max(1, Math.min(totalPages, nextPage)));
   }
 
   function handlePageSubmit() {
+    // Valide la saisie libre de page avant d'appliquer la navigation.
+    // Une valeur invalide remet simplement l'input sur la page courante.
     const requestedPage = Number(pageInput);
     if (!Number.isFinite(requestedPage) || requestedPage < 1) {
       setPageInput(String(currentPage));
@@ -303,14 +323,5 @@ export default function AdminListingsPage() {
         </section>
       </main>
     </ImportedPageDocument>
-  );
-}
-
-function MetricCard({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-2xl bg-white p-6 shadow-sm">
-      <p className="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">{label}</p>
-      <p className="mt-3 text-3xl font-headline font-extrabold text-primary">{value}</p>
-    </div>
   );
 }

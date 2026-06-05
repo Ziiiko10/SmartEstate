@@ -1,3 +1,4 @@
+// Estimation IA: collecte les caracteristiques du bien et calcule une valeur de marche.
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 import ImportedPageDocument from "../components/ImportedPageDocument";
 import { useAuth } from "../auth/AuthContext";
@@ -90,6 +91,7 @@ const statusLabels: Record<string, string> = {
   ok: "Actif",
 };
 
+// Construit un titre lisible a partir de la localisation choisie.
 function buildAnalysisTitle(city: string, district: string) {
   const normalizedCity = city.trim();
   const normalizedDistrict = district.trim();
@@ -105,6 +107,7 @@ function buildAnalysisTitle(city: string, district: string) {
   return "Estimation IA";
 }
 
+// Convertit les nombres issus de l'API en valeur fiable pour les calculs d'affichage.
 function toNumber(value: ApiNumber | undefined) {
   if (value === null || value === undefined || value === "") {
     return 0;
@@ -114,6 +117,7 @@ function toNumber(value: ApiNumber | undefined) {
   return Number.isFinite(numeric) ? numeric : 0;
 }
 
+// Formate une valeur monetaire en DH ou MDH selon son ordre de grandeur.
 function formatMoney(value: ApiNumber | undefined, compact = false) {
   const amount = toNumber(value);
   if (compact && Math.abs(amount) >= 1_000_000) {
@@ -128,6 +132,7 @@ function formatMoney(value: ApiNumber | undefined, compact = false) {
   })} DH`;
 }
 
+// Harmonise l'affichage des pourcentages renvoyes par le moteur ML.
 function formatPercent(value: ApiNumber | undefined) {
   return `${toNumber(value).toLocaleString("fr-MA", {
     maximumFractionDigits: 1,
@@ -135,6 +140,7 @@ function formatPercent(value: ApiNumber | undefined) {
   })}%`;
 }
 
+// Separe l'unite principale pour afficher une hero metric plus lisible.
 function formatMainAmount(value: ApiNumber | undefined) {
   const amount = toNumber(value);
   if (amount >= 1_000_000) {
@@ -148,13 +154,14 @@ function formatMainAmount(value: ApiNumber | undefined) {
   }
 
   return {
-      amount: amount.toLocaleString("fr-MA", {
-        maximumFractionDigits: 0,
-      }),
-      unit: "DH",
-    };
-  }
+    amount: amount.toLocaleString("fr-MA", {
+      maximumFractionDigits: 0,
+    }),
+    unit: "DH",
+  };
+}
 
+// Fabrique l'URL des filtres dependants du type de bien, de la ville et de la transaction.
 function buildEstimationChoicesPath(form: EstimationForm) {
   const searchParams = new URLSearchParams({
     asset_type: form.asset_type,
@@ -168,6 +175,7 @@ function buildEstimationChoicesPath(form: EstimationForm) {
   return `/market-listings/filters/?${searchParams.toString()}`;
 }
 
+// Transforme le formulaire de saisie en payload numerique pret pour l'API.
 function payloadFromForm(form: EstimationForm) {
   return {
     area_sqm: Number(form.area_sqm),
@@ -182,10 +190,12 @@ function payloadFromForm(form: EstimationForm) {
   };
 }
 
+// Genere une cle de cache stable pour eviter les recalculs ML inutiles.
 function valuationCacheKey(payload: ReturnType<typeof payloadFromForm>) {
   return `ml-valuation:${JSON.stringify(payload)}`;
 }
 
+// Reinserre une valeur deja saisie dans les options si elle n'est plus renvoyee par l'API.
 function withCurrentChoice(
   choices: FilterChoice[],
   value: string,
@@ -206,6 +216,7 @@ function withCurrentChoice(
   ];
 }
 
+// Coordonne la saisie du bien, les filtres dynamiques et la valorisation ML.
 export default function AiEstimationPage() {
   const { token, user } = useAuth();
   const [form, setForm] = useState<EstimationForm>(defaultForm);
@@ -220,9 +231,11 @@ export default function AiEstimationPage() {
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(true);
 
+  // Lance une premiere estimation avec le jeu de donnees par defaut pour remplir la page.
   useEffect(() => {
     let isMounted = true;
 
+    // Interroge le endpoint ML principal et met en cache la reponse initiale.
     async function loadInitialEstimate() {
       setIsLoading(true);
       setError("");
@@ -257,9 +270,11 @@ export default function AiEstimationPage() {
     };
   }, [token]);
 
+  // Recharge les listes de choix quand les filtres structurants changent.
   useEffect(() => {
     let isMounted = true;
 
+    // Recupere les villes, quartiers et compteurs compatibles avec la saisie courante.
     async function loadFormChoices() {
       try {
         const payload = await apiRequest<EstimationFormChoices>(buildEstimationChoicesPath(form), {
@@ -323,6 +338,7 @@ export default function AiEstimationPage() {
     [form.city, form.district],
   );
 
+  // Maintient le titre synchronise tant que l'utilisateur n'a pas choisi un libelle manuel.
   useEffect(() => {
     if (!isAutoTitle) {
       return;
@@ -340,6 +356,7 @@ export default function AiEstimationPage() {
     });
   }, [generatedTitle, isAutoTitle]);
 
+  // Soumet les caracteristiques courantes au moteur ML et rafraichit les estimations sauvegardees.
   async function submitEstimate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setIsLoading(true);
@@ -365,10 +382,12 @@ export default function AiEstimationPage() {
     }
   }
 
+  // Met a jour un champ de formulaire de maniere generique.
   function updateField<K extends keyof EstimationForm>(field: K, value: EstimationForm[K]) {
     setForm((current) => ({ ...current, [field]: value }));
   }
 
+  // Bascule entre titre auto-genere et titre personnalise selon la saisie utilisateur.
   function updateTitle(value: string) {
     setForm((current) => ({
       ...current,
@@ -647,6 +666,7 @@ export default function AiEstimationPage() {
   );
 }
 
+// Affiche une metrique compacte dans les panneaux de resultat.
 function DataPill({ label, value }: { label: string; value: string }) {
   return (
     <div className="bg-surface-container-low/60 rounded-lg px-3 py-2">

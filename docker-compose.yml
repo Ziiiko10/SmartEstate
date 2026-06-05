@@ -1,4 +1,6 @@
+# Orchestration locale SmartEstate: application web, ETL marche et services techniques.
 services:
+  # API Django principale exposee en developpement avec montage du code source.
   backend:
     build:
       context: ./backend
@@ -7,6 +9,7 @@ services:
     command: python manage.py runserver 0.0.0.0:8000
     working_dir: /app
     environment:
+      # Parametres applicatifs par defaut pour un demarrage local sans secrets externes.
       DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-smartestate-docker-dev-secret-key}
       DJANGO_DEBUG: ${DJANGO_DEBUG:-True}
       DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-127.0.0.1,localhost,backend}
@@ -32,11 +35,13 @@ services:
       redis:
         condition: service_healthy
 
+  # Worker ETL dedie au scraping continu des annonces du marche.
   market-etl:
     build:
       context: ./backend
     container_name: smartestate-market-etl
     restart: unless-stopped
+    # Lance d'abord les migrations puis entre dans une boucle ETL parametrable.
     command: >
       sh -c "python manage.py migrate &&
       python manage.py scrape_market_listings
@@ -50,6 +55,7 @@ services:
       --loop"
     working_dir: /app
     environment:
+      # Reprend le meme socle de configuration que l'API pour partager base et Redis.
       DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-smartestate-docker-dev-secret-key}
       DJANGO_DEBUG: ${DJANGO_DEBUG:-True}
       DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-127.0.0.1,localhost,backend}
@@ -73,6 +79,7 @@ services:
       redis:
         condition: service_healthy
 
+  # Application frontend Vite servie en mode dev avec hot reload dans le conteneur.
   frontend:
     build:
       context: ./frontend
@@ -81,6 +88,7 @@ services:
     command: sh -c "npm install && npm run dev -- --host 0.0.0.0 --port 5173"
     working_dir: /app
     environment:
+      # Variables d'environnement injectees au build/runtime du frontend.
       VITE_APP_NAME: ${VITE_APP_NAME:-SmartEstate}
       VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://127.0.0.1:8000/api}
       VITE_PUBLIC_DEMO_ACCESS: ${VITE_PUBLIC_DEMO_ACCESS:-false}
@@ -93,6 +101,7 @@ services:
     depends_on:
       - backend
 
+  # Base PostgreSQL principale pour les donnees applicatives SmartEstate.
   postgres:
     image: postgres:16-alpine
     container_name: smartestate-postgres
@@ -111,6 +120,7 @@ services:
       timeout: 5s
       retries: 5
 
+  # Cache Redis et broker utilises par l'application et l'ETL.
   redis:
     image: redis:7-alpine
     container_name: smartestate-redis
@@ -125,6 +135,7 @@ services:
       timeout: 5s
       retries: 5
 
+# Volumes nommes conserves entre redemarrages pour eviter de reperdre les donnees locales.
 volumes:
   frontend_node_modules:
   postgres_data:

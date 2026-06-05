@@ -1,3 +1,4 @@
+// Actions interactives des pages importees: navigation, cibles et comportements de prototype.
 import type { NavigateFunction } from "react-router-dom";
 import {
   APP_ROUTES,
@@ -16,6 +17,8 @@ type DocumentActionContext = {
 };
 
 function normalizeText(value: null | string | undefined) {
+  // Normalise un texte UI pour faciliter les comparaisons tolerant aux accents.
+  // Cette base commune sert a detecter des intentions depuis des libelles varies.
   return (value ?? "")
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
@@ -25,15 +28,21 @@ function normalizeText(value: null | string | undefined) {
 }
 
 function getLabel(trigger: HTMLElement) {
+  // Recupere le libelle textuel principal d'un element interactif.
+  // Le texte est normalise pour etre exploitable dans les correspondances.
   return normalizeText(trigger.textContent);
 }
 
 function getIcon(trigger: HTMLElement) {
+  // Recupere l'icone eventuelle associee a un bouton ou lien.
+  // Le nom de l'icone peut servir de secours quand le texte est ambigu.
   const iconNode = trigger.querySelector<HTMLElement>("[data-icon], .material-symbols-outlined");
   return normalizeText(iconNode?.getAttribute("data-icon") ?? iconNode?.textContent);
 }
 
 function scrollToHash(hash: string) {
+  // Fait defiler la page vers l'ancre demandee si elle existe.
+  // La fonction retourne un booleen pour indiquer si l'action a reussi.
   const target = document.querySelector(hash);
   if (!target) {
     return false;
@@ -44,6 +53,8 @@ function scrollToHash(hash: string) {
 }
 
 function downloadTextFile(filename: string, content: string) {
+  // Genere puis telecharge un petit fichier texte cote navigateur.
+  // Ce helper sert aux exports prototypes et aux sorties legales simplifiees.
   const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
@@ -54,6 +65,8 @@ function downloadTextFile(filename: string, content: string) {
 }
 
 function focusFirstControl() {
+  // Place le focus sur le premier controle principal visible dans la page.
+  // Cela accompagne certaines actions de filtre ou de recherche prototype.
   const control = document.querySelector<HTMLElement>(
     "main select, main input[type='search'], main input[type='text'], main input[type='email']",
   );
@@ -62,6 +75,8 @@ function focusFirstControl() {
 }
 
 function toggleButtonGroup(trigger: HTMLElement) {
+  // Active visuellement un bouton dans un groupe et desactive ses voisins.
+  // Le helper manipule aussi aria-pressed pour un etat plus explicite.
   const parent = trigger.parentElement;
   if (!parent) {
     return;
@@ -82,6 +97,8 @@ function toggleButtonGroup(trigger: HTMLElement) {
 }
 
 function toggleStandaloneButton(trigger: HTMLElement) {
+  // Inverse l'etat visuel d'un bouton autonome.
+  // Cette interaction sert de fallback pour plusieurs controles prototypes.
   if (!(trigger instanceof HTMLButtonElement)) {
     return;
   }
@@ -93,10 +110,14 @@ function toggleStandaloneButton(trigger: HTMLElement) {
 }
 
 function openSupportEmail(subject: string, body: string) {
+  // Ouvre le client mail du navigateur vers l'adresse de support SmartEstate.
+  // Le sujet et le corps sont delegues au builder mailto central.
   window.location.href = buildMailtoHref(subject, body);
 }
 
 async function shareCurrentPage() {
+  // Tente de partager la page courante via l'API Web Share.
+  // Si elle est absente, l'URL est copiee dans le presse-papiers quand possible.
   const shareData = {
     text: "Decouvrez la plateforme SmartEstate.",
     title: document.title,
@@ -114,6 +135,8 @@ async function shareCurrentPage() {
 }
 
 function openDemo(context: DocumentActionContext) {
+  // Ouvre soit l'espace connecte, soit la connexion pre-remplie demo.
+  // Ce helper est utilise par les boutons de demonstration importes.
   if (context.isAuthenticated) {
     context.navigate(getHomeRouteForRole(context.userRole));
     return;
@@ -128,10 +151,14 @@ function openDemo(context: DocumentActionContext) {
 }
 
 function matchesAny(label: string, values: string[]) {
+  // Indique si un libelle contient l'une des expressions attendues.
+  // La recherche repose sur des textes deja normalises.
   return values.some((value) => label.includes(value));
 }
 
 function goToRoute(label: string, icon: string, context: DocumentActionContext) {
+  // Associe un libelle ou une icone a une route de l'application.
+  // Cette table de correspondance centralise la navigation des prototypes importes.
   const routeMap = [
     { match: ["tableau de bord"], route: getHomeRouteForRole(context.userRole) },
     { match: ["estimation", "estimateur ia"], route: APP_ROUTES.userEstimation },
@@ -169,6 +196,8 @@ function goToRoute(label: string, icon: string, context: DocumentActionContext) 
 }
 
 export function handleDocumentAction(trigger: HTMLElement, context: DocumentActionContext) {
+  // Interprete un clic prototype et declenche l'action la plus plausible.
+  // Navigation, support, export et toggles UI sont centralises dans cette fonction.
   const label = getLabel(trigger);
   const icon = getIcon(trigger);
   const href = trigger instanceof HTMLAnchorElement ? trigger.getAttribute("href") : null;

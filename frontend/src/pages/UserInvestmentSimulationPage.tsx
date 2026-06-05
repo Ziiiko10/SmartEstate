@@ -1,5 +1,7 @@
+// Simulation d'investissement: compare le cout, le financement et la rentabilite.
 import { useMemo, useState } from "react";
 import ImportedPageDocument from "../components/ImportedPageDocument";
+import { Field, MetricCard, SelectField } from "../components/PageWidgets";
 import { formatDh, formatPercent, toNumber } from "../lib/formatters";
 
 const pageStyles = `.material-symbols-outlined {
@@ -36,11 +38,15 @@ type MoroccanBankCatalogEntry = {
   sourceUrl: string;
 };
 
-const CUSTOM_BANK_RATE_PRESET_ID = "custom";
 const VERIFIED_BANK_DATA_AT = "5 juin 2026";
 const BKAM_BANKING_IMPLANTATION_2024_LABEL = "Bank Al-Maghrib - Implantation bancaire 2024";
 const BKAM_BANKING_IMPLANTATION_2024_URL =
   "https://www.bkam.ma/fr/content/download/825344/9011558/Implantation%20Bancaire%202024.pdf";
+const FIXED_BANK_INTEREST_RATE = "4.75";
+const FIXED_BANK_INTEREST_RATE_LABEL = `${toNumber(FIXED_BANK_INTEREST_RATE).toLocaleString("fr-MA", {
+  maximumFractionDigits: 2,
+  minimumFractionDigits: 2,
+})} % fixe`;
 const NO_PUBLIC_RATE_LABEL = "Taux public non publié";
 
 const MOROCCAN_BANKS: MoroccanBankCatalogEntry[] = [
@@ -427,8 +433,17 @@ const MOROCCAN_BANKS: MoroccanBankCatalogEntry[] = [
   },
 ];
 
-const SELECTABLE_MOROCCAN_BANKS = MOROCCAN_BANKS.filter((bank) => bank.isSelectable);
-const DEFAULT_SELECTED_BANK = SELECTABLE_MOROCCAN_BANKS.find((bank) => bank.annualRate) ?? SELECTABLE_MOROCCAN_BANKS[0];
+// Normalise les banques selectionnables avec un taux unique pour comparer les scenarios sur la meme base.
+function withFixedSimulationRate(bank: MoroccanBankCatalogEntry): MoroccanBankCatalogEntry {
+  return {
+    ...bank,
+    annualRate: FIXED_BANK_INTEREST_RATE,
+    rateLabel: FIXED_BANK_INTEREST_RATE_LABEL,
+  };
+}
+
+const SELECTABLE_MOROCCAN_BANKS = MOROCCAN_BANKS.filter((bank) => bank.isSelectable).map(withFixedSimulationRate);
+const DEFAULT_SELECTED_BANK = SELECTABLE_MOROCCAN_BANKS[0];
 
 const defaultForm: SimulationForm = {
   agencyFees: "36000",
@@ -441,13 +456,15 @@ const defaultForm: SimulationForm = {
   notaryFees: "64000",
   purchasePrice: "1600000",
   worksBudget: "90000",
-  yearlyInterestRate: DEFAULT_SELECTED_BANK.annualRate,
+  yearlyInterestRate: FIXED_BANK_INTEREST_RATE,
 };
 
+// Traduit la famille de banque en categorie lisible par l'utilisateur final.
 function getBankCategoryLabel(category: MoroccanBankCatalogEntry["category"]) {
   return category === "participative" ? "Banque participative" : "Banque conventionnelle";
 }
 
+// Calcule la mensualite d'un pret amortissable a taux fixe.
 function computeMonthlyPayment(loanAmount: number, annualRate: number, durationYears: number) {
   const monthlyRate = annualRate / 100 / 12;
   const months = durationYears * 12;
@@ -463,6 +480,7 @@ function computeMonthlyPayment(loanAmount: number, annualRate: number, durationY
   return (loanAmount * monthlyRate) / (1 - Math.pow(1 + monthlyRate, -months));
 }
 
+// Produit une lecture simple de la rentabilite a partir du cash-flow et du rendement net.
 function buildAdvice(monthlyGain: number, netYield: number) {
   if (monthlyGain > 1800 && netYield >= 6) {
     return {
@@ -487,38 +505,37 @@ function buildAdvice(monthlyGain: number, netYield: number) {
   };
 }
 
+// Simule un investissement locatif a partir d'hypotheses de prix, credit et charges.
 export default function UserInvestmentSimulationPage() {
   const [form, setForm] = useState<SimulationForm>(defaultForm);
 
+  // Met a jour une hypothese du simulateur.
   function updateField<K extends keyof SimulationForm>(field: K, value: SimulationForm[K]) {
     setForm((current) => ({ ...current, [field]: value }));
   }
 
+  // Applique la banque choisie et recopie le taux fixe commun a la simulation.
   function applyBankRatePreset(presetId: string) {
     const preset = SELECTABLE_MOROCCAN_BANKS.find((item) => item.id === presetId);
 
     if (!preset) {
-      updateField("bankRatePresetId", CUSTOM_BANK_RATE_PRESET_ID);
       return;
     }
 
     setForm((current) => ({
       ...current,
       bankRatePresetId: preset.id,
-      yearlyInterestRate: preset.annualRate || current.yearlyInterestRate,
+      yearlyInterestRate: preset.annualRate,
     }));
   }
 
+  // Retrouve le preset bancaire actif pour afficher son contexte et ses sources.
   const selectedBankRatePreset = useMemo(
     () => SELECTABLE_MOROCCAN_BANKS.find((item) => item.id === form.bankRatePresetId) ?? null,
     [form.bankRatePresetId],
   );
-  const selectedBankNeedsManualRate = selectedBankRatePreset !== null && !selectedBankRatePreset.annualRate;
-  const isManualRateOverride =
-    selectedBankRatePreset !== null &&
-    Boolean(selectedBankRatePreset.annualRate) &&
-    form.yearlyInterestRate !== selectedBankRatePreset.annualRate;
 
+  // Recalcule toutes les metriques financieres des que les hypotheses evoluent.
   const result = useMemo(() => {
     const purchasePrice = toNumber(form.purchasePrice);
     const downPayment = toNumber(form.downPayment);
@@ -580,23 +597,24 @@ export default function UserInvestmentSimulationPage() {
               <Field label="Durée du crédit" suffix="ans" value={form.loanDurationYears} onChange={(value) => updateField("loanDurationYears", value)} />
               <SelectField
                 label="Banque marocaine / données publiques"
-                options={[
-                  ...SELECTABLE_MOROCCAN_BANKS.map((preset) => ({
-                    label: `${preset.bankName} - ${getBankCategoryLabel(preset.category)}`,
-                    value: preset.id,
-                  })),
-                  { label: "Autre banque / saisie manuelle", value: CUSTOM_BANK_RATE_PRESET_ID },
-                ]}
+                options={SELECTABLE_MOROCCAN_BANKS.map((preset) => ({
+                  label: `${preset.bankName} - ${getBankCategoryLabel(preset.category)}`,
+                  value: preset.id,
+                }))}
                 value={form.bankRatePresetId}
                 onChange={applyBankRatePreset}
               />
-              <Field
-                label="Taux d'intérêt appliqué"
-                suffix="%"
-                value={form.yearlyInterestRate}
-                onChange={(value) => updateField("yearlyInterestRate", value)}
-                step="0.1"
-              />
+              <label className="block">
+                <span className="mb-2 block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">
+                  Taux d'intérêt appliqué
+                </span>
+                <div className="flex items-center gap-3 overflow-hidden rounded-xl bg-surface-container-low px-4 py-3">
+                  <span className="text-sm font-semibold text-on-surface">{FIXED_BANK_INTEREST_RATE_LABEL}</span>
+                  <span className="ml-auto rounded-full bg-white px-3 py-1 text-[10px] font-bold uppercase tracking-[0.22em] text-secondary">
+                    Identique pour toutes les banques
+                  </span>
+                </div>
+              </label>
               <div className="md:col-span-2 rounded-2xl border border-secondary/15 bg-secondary/5 p-5">
                 {selectedBankRatePreset ? (
                   <>
@@ -637,18 +655,11 @@ export default function UserInvestmentSimulationPage() {
                       >
                         {selectedBankRatePreset.sourceLabel}
                       </a>
-                      <span
-                        className={`rounded-full px-3 py-2 ${
-                          selectedBankNeedsManualRate || isManualRateOverride
-                            ? "bg-amber-100 text-amber-800"
-                            : "bg-white text-on-surface-variant"
-                        }`}
-                      >
-                        {selectedBankNeedsManualRate
-                          ? "Saisie manuelle requise"
-                          : isManualRateOverride
-                            ? "Taux modifié manuellement"
-                            : "Taux appliqué automatiquement"}
+                      <span className="rounded-full bg-white px-3 py-2 text-on-surface-variant">
+                        Taux fixe commun : {FIXED_BANK_INTEREST_RATE_LABEL}
+                      </span>
+                      <span className="rounded-full bg-white px-3 py-2 text-on-surface-variant">
+                        Simulation homogène entre banques
                       </span>
                       <a
                         className="rounded-full bg-white px-3 py-2 text-secondary transition hover:opacity-80"
@@ -659,12 +670,10 @@ export default function UserInvestmentSimulationPage() {
                         {BKAM_BANKING_IMPLANTATION_2024_LABEL}
                       </a>
                     </div>
-                    {selectedBankRatePreset.category === "participative" ? (
-                      <p className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-                        Cette banque publie une offre participative de type Mourabaha. La simulation ci-dessus reste
-                        une approximation basée sur un taux annuel équivalent que vous devez saisir manuellement.
-                      </p>
-                    ) : null}
+                    <p className="mt-4 rounded-xl border border-secondary/15 bg-white/80 px-4 py-3 text-sm text-on-surface-variant">
+                      Pour garder une comparaison fiable, SmartEstate applique le même taux de crédit à
+                      toutes les banques dans cette simulation, y compris les banques participatives.
+                    </p>
                   </>
                 ) : (
                   <>
@@ -672,99 +681,12 @@ export default function UserInvestmentSimulationPage() {
                       Taux bancaire
                     </p>
                     <p className="mt-3 text-sm leading-relaxed text-on-surface-variant">
-                      Choisissez une banque avec taux public ou saisissez votre taux négocié manuellement.
+                      Choisissez une banque pour afficher sa fiche publique. Le taux de crédit reste fixe
+                      pour toute la simulation.
                     </p>
                   </>
                 )}
               </div>
-              <section className="md:col-span-2 rounded-2xl border border-outline-variant/15 bg-white p-5 shadow-sm">
-                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                  <div>
-                    <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-secondary">
-                      Répertoire bancaire marocain
-                    </p>
-                    <h3 className="mt-2 text-lg font-headline font-bold text-primary">
-                      Toutes les banques citées dans la simulation
-                    </h3>
-                    <p className="mt-1 max-w-3xl text-sm leading-relaxed text-on-surface-variant">
-                      Réseau 2024 issu de Bank Al-Maghrib. Les offres, simulateurs et taux publics ci-dessous
-                      proviennent des sites officiels consultés le {VERIFIED_BANK_DATA_AT}.
-                    </p>
-                  </div>
-                  <a
-                    className="inline-flex items-center rounded-full bg-surface-container-low px-4 py-2 text-sm font-semibold text-secondary transition hover:opacity-80"
-                    href={BKAM_BANKING_IMPLANTATION_2024_URL}
-                    rel="noreferrer"
-                    target="_blank"
-                  >
-                    Ouvrir la source BKAM
-                  </a>
-                </div>
-
-                <div className="mt-5 overflow-x-auto">
-                  <table className="w-full min-w-[1120px] border-collapse text-left">
-                    <thead>
-                      <tr className="border-b border-outline-variant/20 text-[11px] uppercase tracking-widest text-on-surface-variant">
-                        <th className="px-3 py-3 font-bold">Banque</th>
-                        <th className="px-3 py-3 font-bold">Type</th>
-                        <th className="px-3 py-3 font-bold">Réseau 2024</th>
-                        <th className="px-3 py-3 font-bold">Offre / donnée publique</th>
-                        <th className="px-3 py-3 font-bold">Taux public</th>
-                        <th className="px-3 py-3 font-bold">Source officielle</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {MOROCCAN_BANKS.map((bank) => {
-                        const isSelectedBank = form.bankRatePresetId === bank.id;
-
-                        return (
-                          <tr
-                            className={`border-b border-outline-variant/10 align-top ${
-                              isSelectedBank ? "bg-secondary/5" : "bg-transparent"
-                            }`}
-                            key={bank.id}
-                          >
-                            <td className="px-3 py-4">
-                              <p className="font-semibold text-primary">{bank.bankName}</p>
-                              {isSelectedBank ? (
-                                <span className="mt-2 inline-flex rounded-full bg-white px-3 py-1 text-[11px] font-bold text-secondary shadow-sm">
-                                  Banque sélectionnée
-                                </span>
-                              ) : null}
-                            </td>
-                            <td className="px-3 py-4 text-sm text-on-surface-variant">
-                              {getBankCategoryLabel(bank.category)}
-                            </td>
-                            <td className="px-3 py-4 text-sm font-semibold text-primary">
-                              {bank.agencyCount2024.toLocaleString("fr-MA")} agences
-                            </td>
-                            <td className="px-3 py-4">
-                              <p className="text-sm font-semibold text-primary">{bank.offerLabel}</p>
-                              <p className="mt-1 text-sm leading-relaxed text-on-surface-variant">{bank.note}</p>
-                            </td>
-                            <td className="px-3 py-4">
-                              <span className="inline-flex rounded-full bg-surface-container-low px-3 py-2 text-xs font-bold text-secondary">
-                                {bank.rateLabel}
-                              </span>
-                            </td>
-                            <td className="px-3 py-4">
-                              <a
-                                className="text-sm font-semibold text-secondary transition hover:opacity-80"
-                                href={bank.sourceUrl}
-                                rel="noreferrer"
-                                target="_blank"
-                              >
-                                {bank.sourceLabel}
-                              </a>
-                              <p className="mt-2 text-xs text-on-surface-variant">Vérifié le {bank.asOf}</p>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </section>
               <Field label="Loyer mensuel estimé" suffix="DH" value={form.monthlyRent} onChange={(value) => updateField("monthlyRent", value)} />
               <Field label="Charges mensuelles" suffix="DH" value={form.monthlyCharges} onChange={(value) => updateField("monthlyCharges", value)} />
               <Field label="Frais de notaire" suffix="DH" value={form.notaryFees} onChange={(value) => updateField("notaryFees", value)} />
@@ -800,82 +722,5 @@ export default function UserInvestmentSimulationPage() {
         </section>
       </main>
     </ImportedPageDocument>
-  );
-}
-
-function Field({
-  label,
-  onChange,
-  step = "1",
-  suffix,
-  value,
-}: {
-  label: string;
-  onChange: (value: string) => void;
-  step?: string;
-  suffix: string;
-  value: string;
-}) {
-  return (
-    <label className="block">
-      <span className="mb-2 block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">
-        {label}
-      </span>
-      <div className="flex items-center overflow-hidden rounded-xl bg-surface-container-low">
-        <input
-          className="w-full border-none bg-transparent px-4 py-3 text-sm focus:ring-2 focus:ring-secondary/20"
-          min={0}
-          onChange={(event) => onChange(event.target.value)}
-          step={step}
-          type="number"
-          value={value}
-        />
-        <span className="px-4 text-xs font-bold uppercase tracking-widest text-on-surface-variant">
-          {suffix}
-        </span>
-      </div>
-    </label>
-  );
-}
-
-function SelectField({
-  label,
-  onChange,
-  options,
-  value,
-}: {
-  label: string;
-  onChange: (value: string) => void;
-  options: Array<{ label: string; value: string }>;
-  value: string;
-}) {
-  return (
-    <label className="block">
-      <span className="mb-2 block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">
-        {label}
-      </span>
-      <div className="overflow-hidden rounded-xl bg-surface-container-low">
-        <select
-          className="w-full border-none bg-transparent px-4 py-3 text-sm focus:ring-2 focus:ring-secondary/20"
-          value={value}
-          onChange={(event) => onChange(event.target.value)}
-        >
-          {options.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-      </div>
-    </label>
-  );
-}
-
-function MetricCard({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-2xl bg-white p-5 shadow-sm">
-      <p className="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">{label}</p>
-      <p className="mt-3 text-2xl font-headline font-extrabold text-primary">{value}</p>
-    </div>
   );
 }

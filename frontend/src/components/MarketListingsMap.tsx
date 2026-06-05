@@ -1,3 +1,4 @@
+// Carte des annonces: regroupe les biens par zone et colore les quartiers prioritaires.
 import { SkeletonBlock } from "./LoadingState";
 
 type MarketMapListing = {
@@ -88,6 +89,8 @@ const MOROCCO_CITY_COORDINATES: Record<string, MapPoint> = {
 };
 
 function normalizeMapKey(value: string) {
+  // Normalise une ville ou un quartier pour les cles de dictionnaire.
+  // Les accents et espaces sont retires afin de stabiliser les correspondances.
   return value
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
@@ -97,6 +100,8 @@ function normalizeMapKey(value: string) {
 }
 
 function hashString(value: string) {
+  // Produit un hash numerique simple a partir d'une chaine.
+  // Il sert a generer des positions pseudo-stables sur la carte.
   let hash = 0;
 
   for (let index = 0; index < value.length; index += 1) {
@@ -107,10 +112,14 @@ function hashString(value: string) {
 }
 
 function clamp(value: number, min: number, max: number) {
+  // Borne une coordonnee ou une taille dans une plage autorisee.
+  // Cela evite que des marqueurs sortent du canevas de la carte.
   return Math.min(max, Math.max(min, value));
 }
 
 function toNumber(value: number | string | null | undefined) {
+  // Convertit une valeur numerique heterogene en nombre exploitable.
+  // Les entrees vides ou invalides reviennent simplement a 0.
   if (value === null || value === undefined || value === "") {
     return 0;
   }
@@ -120,6 +129,8 @@ function toNumber(value: number | string | null | undefined) {
 }
 
 function resolvePricePerSqm(listing: MarketMapListing) {
+  // Determine le prix au metre carre d'une annonce pour la cartographie.
+  // La valeur explicite est privilegiee, avec repli sur prix / surface si possible.
   const explicitValue = toNumber(listing.price_per_sqm);
   if (explicitValue > 0) {
     return explicitValue;
@@ -135,10 +146,14 @@ function resolvePricePerSqm(listing: MarketMapListing) {
 }
 
 function formatMoney(value: number) {
+  // Formate un montant entier en dirhams pour les info-bulles et panneaux.
+  // Le rendu reste volontairement compact pour la lecture visuelle.
   return `${Math.round(value).toLocaleString("fr-MA")} DH`;
 }
 
 function getCityAnchor(city: string) {
+  // Retourne le point de reference d'une ville sur la carte stylisee.
+  // Une ancre pseudo-aleatoire stable est generee si la ville n'est pas connue.
   const key = normalizeMapKey(city);
   const knownAnchor = MOROCCO_CITY_COORDINATES[key];
 
@@ -154,6 +169,8 @@ function getCityAnchor(city: string) {
 }
 
 function getDistrictAnchor(city: string, district: string) {
+  // Calcule la position approximate d'un quartier autour de l'ancre de sa ville.
+  // Le decalage est stable grace a un hash base sur ville et district.
   const cityAnchor = getCityAnchor(city);
   const districtKey = `${normalizeMapKey(city)}|${normalizeMapKey(district || "sans_district")}`;
   const seed = hashString(districtKey);
@@ -167,6 +184,8 @@ function getDistrictAnchor(city: string, district: string) {
 }
 
 function getListingAnchor(listing: MarketMapListing, districtPoint: MapPoint) {
+  // Place une annonce a proximite de son quartier sans superposer tous les points.
+  // Le leger deplacement repose sur un hash deterministe de l'annonce.
   const seed = hashString(`${listing.id}|${listing.title}|${listing.source}`);
   const angle = ((seed % 360) * Math.PI) / 180;
   const radius = 0.8 + (seed % 5) * 0.55;
@@ -178,6 +197,8 @@ function getListingAnchor(listing: MarketMapListing, districtPoint: MapPoint) {
 }
 
 function buildMarketMapData(listings: MarketMapListing[]): MarketMapData {
+  // Agrege les annonces en villes, quartiers et marqueurs exploitables par la carte.
+  // Cette preparation calcule aussi les zones premium selon le prix moyen au m².
   const districtAccumulator = new Map<
     string,
     {
@@ -325,6 +346,8 @@ function LegendBadge({
   colorClassName: string;
   label: string;
 }) {
+  // Rend une pastille de legende pour expliquer les couleurs de la carte.
+  // Le composant est volontairement compact pour se superposer au canevas.
   return (
     <div className="inline-flex items-center gap-2 rounded-full bg-white/85 px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm backdrop-blur-sm">
       <span className={`h-2.5 w-2.5 rounded-full ${colorClassName}`} />
@@ -340,6 +363,8 @@ function MapMetricCard({
   label: string;
   value: string;
 }) {
+  // Affiche un KPI synthétique lie a la carte du marche.
+  // Ces cartes completent la lecture visuelle avec quelques chiffres cles.
   return (
     <div className="rounded-2xl bg-white p-5 shadow-sm">
       <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-on-surface-variant">{label}</p>
@@ -361,6 +386,8 @@ export default function MarketListingsMap({
   listings: MarketMapListing[];
   selectedCity?: string;
 }) {
+  // Affiche une carte stylisee des annonces ETL par villes et quartiers.
+  // Le composant gere aussi les etats vide, chargement et fallback de donnees.
   if (isLoading) {
     return (
       <section className="mb-8 grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1.45fr)_360px]">

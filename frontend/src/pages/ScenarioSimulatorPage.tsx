@@ -29,6 +29,8 @@ const pageStyles = `.material-symbols-outlined {
         }`;
 
 export default function ScenarioSimulatorPage() {
+  // Affiche la version prototype du simulateur de scenarios historique.
+  // Cette page reste principalement demonstrative dans le catalogue.
   return (
     <ImportedPageDocument
       bodyClassName="bg-background text-on-background font-body antialiased"

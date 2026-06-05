@@ -1,3 +1,4 @@
+// Definition des roles, routes d'accueil et navigations selon le profil.
 import { APP_ROUTES } from "./smartestateApp";
 
 export const USER_ROLES = {
@@ -21,6 +22,8 @@ export const ROLE_HOME_ROUTES: Record<UserRole, string> = {
 };
 
 export function isUserRole(role: null | string | undefined): role is UserRole {
+  // Verifie qu'une chaine correspond bien a l'un des roles supportes.
+  // Ce predicate permet ensuite d'affiner le typage TypeScript.
   return (
     role === USER_ROLES.UTILISATEUR_SIMPLE ||
     role === USER_ROLES.AGENT_IMMOBILIER ||
@@ -29,6 +32,8 @@ export function isUserRole(role: null | string | undefined): role is UserRole {
 }
 
 export function getHomeRouteForRole(role: null | string | undefined) {
+  // Retourne la page d'accueil adaptee a un role donne.
+  // Les utilisateurs inconnus ou anonymes sont renvoyes vers la connexion.
   if (isUserRole(role)) {
     return ROLE_HOME_ROUTES[role];
   }
@@ -37,6 +42,8 @@ export function getHomeRouteForRole(role: null | string | undefined) {
 }
 
 export function getRoleLabel(role: null | string | undefined) {
+  // Convertit une valeur de role en libelle lisible pour l'interface.
+  // Une valeur de secours reste prevue si le role est absent ou inattendu.
   switch (role) {
     case USER_ROLES.UTILISATEUR_SIMPLE:
       return "Utilisateur simple";
@@ -50,6 +57,8 @@ export function getRoleLabel(role: null | string | undefined) {
 }
 
 export function isAllowedRole(role: null | string | undefined, allowedRoles?: UserRole[]) {
+  // Verifie si un role peut acceder a une route ou action donnee.
+  // Sans liste de restriction, la fonction autorise explicitement l'acces.
   if (!allowedRoles || allowedRoles.length === 0) {
     return true;
   }
@@ -58,6 +67,8 @@ export function isAllowedRole(role: null | string | undefined, allowedRoles?: Us
 }
 
 export function getRoleNavigation(role: null | string | undefined): RoleNavigationItem[] {
+  // Retourne la navigation laterale adaptee au profil actif.
+  // Chaque role voit uniquement les raccourcis pertinents pour son espace.
   if (role === USER_ROLES.ADMINISTRATEUR) {
     return [
       { href: APP_ROUTES.adminDashboard, icon: "space_dashboard", label: "Tableau de bord" },
@@ -68,7 +79,6 @@ export function getRoleNavigation(role: null | string | undefined): RoleNavigati
       { href: APP_ROUTES.adminLocations, icon: "location_city", label: "Villes et quartiers" },
       { href: APP_ROUTES.adminData, icon: "dataset", label: "Données immobilières" },
       { href: APP_ROUTES.adminModel, icon: "model_training", label: "Modèle Machine Learning" },
-      { href: APP_ROUTES.adminStats, icon: "monitoring", label: "Statistiques globales" },
       { href: APP_ROUTES.adminSettings, icon: "settings", label: "Paramètres" },
       { href: APP_ROUTES.adminProfile, icon: "account_circle", label: "Profil" },
     ];
@@ -82,7 +92,6 @@ export function getRoleNavigation(role: null | string | undefined): RoleNavigati
       { href: APP_ROUTES.agentNewListing, icon: "post_add", label: "Ajouter une annonce" },
       { href: APP_ROUTES.agentEstimation, icon: "calculate", label: "Estimation professionnelle" },
       { href: APP_ROUTES.agentRequests, icon: "support_agent", label: "Demandes clients" },
-      { href: APP_ROUTES.agentStats, icon: "insights", label: "Statistiques" },
       { href: APP_ROUTES.agentProfile, icon: "account_circle", label: "Profil" },
     ];
   }
@@ -98,6 +107,8 @@ export function getRoleNavigation(role: null | string | undefined): RoleNavigati
 }
 
 export function getRolePrimaryAction(role: null | string | undefined) {
+  // Retourne l'action principale a mettre en avant selon le role.
+  // Ce raccourci alimente notamment la sidebar desktop et mobile.
   if (role === USER_ROLES.ADMINISTRATEUR) {
     return {
       href: APP_ROUTES.adminUsers,

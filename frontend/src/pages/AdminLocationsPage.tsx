@@ -1,3 +1,5 @@
+// Villes et quartiers admin: permet de piloter le referentiel geographique simplifie.
+// Cette page conserve pour l'instant un fonctionnement purement local.
 import { FormEvent, useState } from "react";
 import ImportedPageDocument from "../components/ImportedPageDocument";
 
@@ -13,11 +15,15 @@ const initialLocations = [
 ];
 
 export default function AdminLocationsPage() {
+  // Affiche l'ecran admin de gestion des villes et quartiers suivis.
+  // Les nouvelles zones sont ajoutees dans un etat local de demonstration.
   const [locations, setLocations] = useState(initialLocations);
   const [city, setCity] = useState("Tanger");
   const [district, setDistrict] = useState("Malabata");
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    // Ajoute un quartier a une ville existante ou cree une nouvelle ville locale.
+    // La logique evite aussi de dupliquer un quartier deja present.
     event.preventDefault();
     setLocations((current) => {
       const existing = current.find((item) => item.city === city);
@@ -80,6 +86,8 @@ export default function AdminLocationsPage() {
 }
 
 function Field({ label, onChange, value }: { label: string; onChange: (value: string) => void; value: string }) {
+  // Rend un champ texte simple reutilise dans les formulaires inline de cette page.
+  // Le helper garde une apparence homogene avec le reste de l'interface admin.
   return (
     <label className="block">
       <span className="mb-2 block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">{label}</span>

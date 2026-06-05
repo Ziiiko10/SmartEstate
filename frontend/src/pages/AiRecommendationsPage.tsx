@@ -1,3 +1,4 @@
+// Recommandations IA: propose des biens et des pistes d'action selon le contexte.
 import { useEffect, useMemo, useState } from "react";
 import ImportedPageDocument from "../components/ImportedPageDocument";
 import { DashboardPageLoader } from "../components/LoadingState";
@@ -80,6 +81,7 @@ const emptyOverview: DashboardOverview = {
   refreshed_at: "",
 };
 
+// Convertit une valeur heterogene venue de l'API en nombre exploitable.
 function toNumber(value: ApiNumber | undefined) {
   if (value === null || value === undefined || value === "") {
     return 0;
@@ -88,10 +90,12 @@ function toNumber(value: ApiNumber | undefined) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+// Normalise le texte pour faciliter les recherches multi-criteres.
 function normalizeText(value: string | null | undefined) {
   return (value ?? "").trim().toLowerCase();
 }
 
+// Formate les montants des opportunites et recommandations.
 function formatMoney(value: ApiNumber | undefined, compact = false) {
   const amount = toNumber(value);
   if (compact && Math.abs(amount) >= 1_000_000) {
@@ -106,6 +110,7 @@ function formatMoney(value: ApiNumber | undefined, compact = false) {
   })} DH`;
 }
 
+// Uniformise l'affichage des scores et ROI.
 function formatPercent(value: ApiNumber | undefined) {
   return `${toNumber(value).toLocaleString("fr-MA", {
     maximumFractionDigits: 1,
@@ -113,6 +118,7 @@ function formatPercent(value: ApiNumber | undefined) {
   })}%`;
 }
 
+// Rend les timestamps de l'API lisibles dans l'interface.
 function formatDate(value: string) {
   if (!value) {
     return "N/A";
@@ -124,6 +130,7 @@ function formatDate(value: string) {
   }).format(new Date(value));
 }
 
+// Produit un indicateur relatif recent pour les cartes d'opportunites.
 function relativeDate(value: string) {
   if (!value) {
     return "Synchronisation en attente";
@@ -137,6 +144,7 @@ function relativeDate(value: string) {
   return formatDate(value);
 }
 
+// Associe une palette de couleur a chaque ville pour les placeholders visuels.
 function cityGradient(city: string) {
   const palette: Record<string, string> = {
     Agadir: "from-[#0f766e] via-[#14b8a6] to-[#67e8f9]",
@@ -149,6 +157,7 @@ function cityGradient(city: string) {
   return palette[city] ?? "from-[#334155] via-[#475569] to-[#94a3b8]";
 }
 
+// Traduit le signal ML en libelle commercial compréhensible.
 function signalLabel(signal: string) {
   const labels: Record<string, string> = {
     avoid: "Risque élevé",
@@ -159,6 +168,7 @@ function signalLabel(signal: string) {
   return labels[signal] ?? signal;
 }
 
+// Convertit la priorite technique en niveau lisible.
 function priorityLabel(priority: string) {
   const labels: Record<string, string> = {
     high: "Haute",
@@ -168,6 +178,7 @@ function priorityLabel(priority: string) {
   return labels[priority] ?? priority;
 }
 
+// Habille les statuts de recommandation renvoyes par le backend.
 function statusLabel(status: string) {
   const labels: Record<string, string> = {
     accepted: "Acceptée",
@@ -178,6 +189,7 @@ function statusLabel(status: string) {
   return labels[status] ?? status;
 }
 
+// Traduit la categorie de recommandation dans le vocabulaire metier.
 function categoryLabel(category: string) {
   const labels: Record<string, string> = {
     acquisition: "Acquisition",
@@ -188,6 +200,7 @@ function categoryLabel(category: string) {
   return labels[category] ?? category;
 }
 
+// Verifie qu'un enregistrement contient bien tous les termes de la recherche courante.
 function matchesSearchTerms(values: Array<string | null | undefined>, matchTerms: string[]) {
   if (matchTerms.length === 0) {
     return true;
@@ -197,6 +210,7 @@ function matchesSearchTerms(values: Array<string | null | undefined>, matchTerms
   return matchTerms.every((term) => haystack.includes(normalizeText(term)));
 }
 
+// Reunit les opportunites ETL/ML et les recommandations sauvegardees dans un meme cockpit.
 export default function AiRecommendationsPage() {
   const { token, user } = useAuth();
   const [overview, setOverview] = useState<DashboardOverview>(emptyOverview);
@@ -207,9 +221,11 @@ export default function AiRecommendationsPage() {
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(true);
 
+  // Charge en parallele les opportunites de marche et les recommandations en base.
   useEffect(() => {
     let active = true;
 
+    // Alimente la page depuis le dashboard enrichi et le module de recommandations.
     async function loadPage() {
       setIsLoading(true);
       setError("");
@@ -244,6 +260,7 @@ export default function AiRecommendationsPage() {
     };
   }, [token]);
 
+  // Construit les options de recherche globale a partir des villes visibles dans les donnees chargees.
   const searchOptions = useMemo<GlobalSearchOption[]>(() => {
     const options: GlobalSearchOption[] = [
       {
@@ -291,6 +308,7 @@ export default function AiRecommendationsPage() {
     [searchOptions, selectedSearch],
   );
 
+  // Filtre les opportunites selon le signal, la source ETL et la recherche geographique.
   const filteredOpportunities = useMemo(() => {
     return overview.opportunities.filter((opportunity) => {
       if (selectedSignal !== "all" && opportunity.signal !== selectedSignal) {
@@ -308,6 +326,7 @@ export default function AiRecommendationsPage() {
     });
   }, [overview.opportunities, selectedSearchOption, selectedSignal, selectedSource]);
 
+  // Filtre les recommandations en base avec la meme logique de recherche globale.
   const filteredRecommendations = useMemo(() => {
     return recommendations.filter((recommendation) =>
       matchesSearchTerms(
@@ -739,6 +758,7 @@ export default function AiRecommendationsPage() {
   );
 }
 
+// Carte KPI locale pour les tuiles de tete de page.
 function MetricCard({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-2xl bg-surface-container-lowest p-6 shadow-[0_12px_40px_rgba(26,28,29,0.06)]">
@@ -748,6 +768,7 @@ function MetricCard({ label, value }: { label: string; value: string }) {
   );
 }
 
+// Badge compact pour afficher une paire libelle / valeur.
 function DataPill({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-xl bg-surface-container-low px-4 py-3">
@@ -757,6 +778,7 @@ function DataPill({ label, value }: { label: string; value: string }) {
   );
 }
 
+// Ligne de synthese pour les panneaux lateraux sombres.
 function DataRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-center justify-between gap-4 border-b border-white/10 pb-4 text-sm">

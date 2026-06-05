@@ -1,3 +1,4 @@
+// Page d'accueil publique: presente la proposition de valeur et redirige les visiteurs.
 import ImportedPageDocument from "../components/ImportedPageDocument";
 
 const pageStyles = `.material-symbols-outlined {
@@ -5,6 +6,8 @@ const pageStyles = `.material-symbols-outlined {
         }`;
 
 export default function HomePage() {
+  // Affiche la page d'accueil marketing de SmartEstate.
+  // Cette vue presente la promesse produit, les preuves et les appels a l'action.
   return (
     <ImportedPageDocument
       bodyClassName="bg-background text-on-surface font-body selection:bg-secondary-container overflow-x-hidden"

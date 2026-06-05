@@ -1,5 +1,7 @@
+// Brouillon des annonces de l'agent avec actions de statut rapides.
 import { useState } from "react";
 import ImportedPageDocument from "../components/ImportedPageDocument";
+import { MetricCard } from "../components/DashboardWidgets";
 import { formatDh } from "../lib/formatters";
 
 const pageStyles = `.material-symbols-outlined {
@@ -14,10 +16,14 @@ const initialListings = [
 ];
 
 export default function AgentListingsPage() {
+  // Affiche la liste des annonces gerees par l'agent immobilier.
+  // La page met surtout en avant le suivi d'inventaire et les actions rapides.
   const [listings, setListings] = useState(initialListings);
   const [message, setMessage] = useState("");
 
   function updateStatus(id: number, nextStatus: string) {
+    // Met a jour le statut local d'une annonce agent.
+    // Un message de confirmation est affiche pour rendre l'action visible.
     setListings((current) =>
       current.map((listing) => (listing.id === id ? { ...listing, status: nextStatus } : listing)),
     );
@@ -103,14 +109,5 @@ export default function AgentListingsPage() {
         </section>
       </main>
     </ImportedPageDocument>
-  );
-}
-
-function MetricCard({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-2xl bg-white p-6 shadow-sm">
-      <p className="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">{label}</p>
-      <p className="mt-3 text-3xl font-headline font-extrabold text-primary">{value}</p>
-    </div>
   );
 }

@@ -1,3 +1,4 @@
+# Scrapers des sources de biens: collectent les annonces brutes sur le web.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -16,6 +17,8 @@ from urllib.request import Request, urlopen
 
 logger = logging.getLogger(__name__)
 
+# Agent HTTP par defaut utilise pour les requetes de scraping.
+# Il identifie clairement l'usage ETL du backend aupres des sites cibles.
 DEFAULT_USER_AGENT = (
     "SmartEstateMarketETL/1.0 "
     "(contact: admin@smartestate.local; purpose: market-data aggregation)"
@@ -24,6 +27,8 @@ DEFAULT_USER_AGENT = (
 AVITO_DEFAULT_URL = "https://www.avito.ma/fr/maroc/immobilier"
 MUBAWAB_DEFAULT_URL = "https://www.mubawab.ma/fr/cc/immobilier-a-vendre:o:n"
 
+# Liste de villes connues utilisee pour reconnaitre les localisations marocaines.
+# Une version normalisee sera preparee juste en dessous pour les comparaisons souples.
 CITY_NAMES = [
     "Agadir",
     "Al Hoceima",
@@ -73,8 +78,13 @@ CITY_NAMES = [
     "Tetouan",
     "Tétouan",
 ]
+
+# Table de correspondance entre ville normalisee et libelle d'origine.
+# Elle permet de reconnaitre une ville meme si les accents ou la casse varient.
 CITY_BY_NORMALIZED = {unicodedata.normalize("NFKD", city).encode("ascii", "ignore").decode("ascii").lower(): city for city in CITY_NAMES}
 
+# Expressions regulieres reutilisees pendant le nettoyage et le parsing HTML.
+# Les regles couvrent surtout les espaces, balises, prix et surfaces.
 SPACES_RE = re.compile(r"[\s\u00a0]+")
 SCRIPT_STYLE_RE = re.compile(r"(?is)<(script|style|noscript)\b.*?</\1>")
 BLOCK_TAG_RE = re.compile(r"(?i)<br\s*/?>|</(?:p|div|li|h[1-6]|section|article|tr|td)>")
@@ -85,6 +95,8 @@ AREA_RE = re.compile(r"(\d+(?:[.,]\d+)?)\s*m\s*(?:2|\u00b2|&sup2;)?", re.I)
 
 @dataclass
 class ScrapedListing:
+    # Represente une annonce brute extraite d'une source externe.
+    # La structure rassemble les champs normalises avant insertion en base.
     source: str
     url: str
     title: str
@@ -106,16 +118,22 @@ class ScrapedListing:
 
 
 def normalize_text(value: str) -> str:
+    # Nettoie un texte HTML ou brut en normalisant espaces et entites.
+    # Ce helper produit une chaine plus stable pour les extractions suivantes.
     return SPACES_RE.sub(" ", unescape(value or "")).strip()
 
 
 def normalize_for_match(value: str) -> str:
+    # Normalise fortement un texte pour les comparaisons souples.
+    # Les accents, la casse et les espaces superflus sont neutralises.
     normalized = unicodedata.normalize("NFKD", value or "")
     ascii_value = normalized.encode("ascii", "ignore").decode("ascii")
     return SPACES_RE.sub(" ", ascii_value.lower()).strip()
 
 
 def fetch_html(url: str, timeout: int = 20, user_agent: str = DEFAULT_USER_AGENT) -> str:
+    # Telecharge le HTML d'une page avec quelques tentatives de reprise.
+    # La fonction gere aussi certaines reponses partielles frequentes en scraping.
     last_error: Exception | None = None
     for attempt in range(3):
         request = Request(
@@ -150,6 +168,8 @@ def fetch_html(url: str, timeout: int = 20, user_agent: str = DEFAULT_USER_AGENT
 
 
 def iri_to_uri(url: str) -> str:
+    # Convertit une URL potentiellement internationale en URI ASCII exploitable.
+    # Cela securise ensuite le dedoublonnage et plusieurs appels reseau.
     parsed = urlparse(url)
     netloc = parsed.netloc.encode("idna").decode("ascii") if parsed.netloc else ""
     return urlunparse(
@@ -165,6 +185,8 @@ def iri_to_uri(url: str) -> str:
 
 
 def html_to_lines(html: str) -> list[str]:
+    # Transforme un document HTML en lignes de texte nettoyees.
+    # Les balises structurelles sont converties en retours a la ligne avant nettoyage.
     cleaned = SCRIPT_STYLE_RE.sub("\n", html or "")
     cleaned = BLOCK_TAG_RE.sub("\n", cleaned)
     text = TAG_RE.sub("\n", cleaned)
@@ -173,16 +195,22 @@ def html_to_lines(html: str) -> list[str]:
 
 
 def strip_tags(value: str) -> str:
+    # Supprime les balises HTML d'une petite portion de texte.
+    # Le resultat est aussi normalise pour rester coherent avec le reste du parsing.
     return normalize_text(TAG_RE.sub(" ", value or ""))
 
 
 def get_attr(tag: str, attr_name: str) -> str:
+    # Recupere la valeur d'un attribut HTML dans une balise brute.
+    # Ce helper evite de repliquer la meme expression reguliere partout.
     pattern = rf"""{attr_name}\s*=\s*(['"])(.*?)\1"""
     match = re.search(pattern, tag, re.I | re.S)
     return unescape(match.group(2)).strip() if match else ""
 
 
 def extract_meta_content(html: str, names: Iterable[str]) -> str:
+    # Extrait le contenu de la premiere meta balise correspondant a une liste de noms.
+    # La fonction sert notamment aux titres, descriptions et images Open Graph.
     accepted = {name.lower() for name in names}
     for match in re.finditer(r"(?is)<meta\b[^>]*>", html or ""):
         tag = match.group(0)
@@ -193,11 +221,15 @@ def extract_meta_content(html: str, names: Iterable[str]) -> str:
 
 
 def extract_tag_text(html: str, tag_name: str) -> str:
+    # Extrait le texte interne d'une balise HTML donnee.
+    # Le contenu est nettoye pour ne garder qu'une chaine directement exploitable.
     match = re.search(rf"(?is)<{tag_name}\b[^>]*>(.*?)</{tag_name}>", html or "")
     return strip_tags(match.group(1)) if match else ""
 
 
 def extract_title(html: str, fallback: str = "") -> str:
+    # Extrait le meilleur titre disponible pour une annonce.
+    # La fonction combine h1, metas sociales, balise title puis fallback si besoin.
     title = extract_tag_text(html, "h1")
     if not title:
         title = extract_meta_content(html, ["og:title", "twitter:title"])
@@ -211,13 +243,19 @@ def extract_title(html: str, fallback: str = "") -> str:
 
 
 class AnchorExtractor(HTMLParser):
+    # Parseur HTML minimaliste charge de collecter les liens et leurs libelles.
+    # Il sert a detecter rapidement les URLs d'annonces depuis une page liste.
     def __init__(self):
+        # Initialise les buffers utilises pendant la collecte des balises a.
+        # L'etat interne sera rempli progressivement au fil du parsing HTML.
         super().__init__()
         self.anchors: list[tuple[str, str]] = []
         self._current_href: str | None = None
         self._parts: list[str] = []
 
     def handle_starttag(self, tag, attrs):
+        # Detecte l'ouverture d'un lien HTML et prepare la capture de son contenu.
+        # Seules les balises a sont pertinentes pour cette extraction.
         if tag.lower() != "a":
             return
         attrs_dict = dict(attrs)
@@ -225,10 +263,14 @@ class AnchorExtractor(HTMLParser):
         self._parts = []
 
     def handle_data(self, data):
+        # Accumule le texte rencontre a l'interieur du lien courant.
+        # Ces fragments seront concatenes a la fermeture de la balise.
         if self._current_href is not None:
             self._parts.append(data)
 
     def handle_endtag(self, tag):
+        # Finalise un lien quand la balise a se ferme.
+        # L'URL et le libelle normalise sont alors ajoutes au resultat.
         if tag.lower() != "a" or self._current_href is None:
             return
         label = normalize_text(" ".join(self._parts))
@@ -238,12 +280,16 @@ class AnchorExtractor(HTMLParser):
 
 
 def extract_anchors(html: str) -> list[tuple[str, str]]:
+    # Retourne tous les couples URL/libelle detectes dans un HTML.
+    # La fonction encapsule l'utilisation du parseur AnchorExtractor.
     parser = AnchorExtractor()
     parser.feed(html or "")
     return parser.anchors
 
 
 def dedupe_candidates(candidates: Iterable[tuple[str, str]]) -> list[tuple[str, str]]:
+    # Supprime les doublons d'URL tout en gardant le meilleur libelle disponible.
+    # Les URLs sont aussi normalisees avant comparaison pour plus de robustesse.
     by_url: dict[str, str] = {}
     for url, title in candidates:
         if not url:
@@ -256,6 +302,8 @@ def dedupe_candidates(candidates: Iterable[tuple[str, str]]) -> list[tuple[str, 
 
 
 def decimal_from_text(value: str) -> Decimal | None:
+    # Convertit un texte numerique approximatif en Decimal.
+    # Les espaces, symboles parasites et virgules sont nettoyes avant conversion.
     value = normalize_text(value).replace(" ", "").replace("\u00a0", "").replace(",", ".")
     value = re.sub(r"[^0-9.]", "", value)
     if not value:
@@ -267,6 +315,8 @@ def decimal_from_text(value: str) -> Decimal | None:
 
 
 def int_from_pattern(text: str, pattern: str) -> int | None:
+    # Extrait un entier a partir d'une expression reguliere et d'un texte source.
+    # Le helper renvoie None si aucun nombre exploitable n'est trouve.
     match = re.search(pattern, text, re.I)
     if not match:
         return None
@@ -277,6 +327,8 @@ def int_from_pattern(text: str, pattern: str) -> int | None:
 
 
 def parse_price(text: str, transaction_type: str = "unknown") -> tuple[Decimal | None, str, str]:
+    # Extrait le prix, la devise et la periodicite d'une annonce.
+    # La fonction ignore certains faux positifs comme les mensualites de credit.
     if re.search(r"(prix a consulter|demander le prix)", normalize_for_match(text)):
         return None, "MAD", ""
 
@@ -302,11 +354,15 @@ def parse_price(text: str, transaction_type: str = "unknown") -> tuple[Decimal |
 
 
 def parse_area(text: str) -> Decimal | None:
+    # Extrait une surface en metres carres depuis un texte libre.
+    # Le resultat est converti dans un Decimal compatible avec le modele.
     match = AREA_RE.search(text or "")
     return decimal_from_text(match.group(1)) if match else None
 
 
 def parse_bedrooms(text: str) -> int | None:
+    # Extrait le nombre de chambres a partir d'un texte annonce.
+    # Plusieurs abreviations courantes sont reconnues pour rester tolerant.
     return int_from_pattern(
         text,
         r"(\d+)\s*(?:chambres?|ch\.|ch\b|chambre\(s\))",
@@ -314,6 +370,8 @@ def parse_bedrooms(text: str) -> int | None:
 
 
 def parse_bathrooms(text: str) -> int | None:
+    # Extrait le nombre de salles de bain d'un texte libre.
+    # Le helper reutilise un parseur entier pour rester simple et robuste.
     return int_from_pattern(
         text,
         r"(\d+)\s*(?:salles?\s+de\s+bains?|sdbs?|sdb\(s\))",
@@ -321,6 +379,8 @@ def parse_bathrooms(text: str) -> int | None:
 
 
 def infer_asset_type(text: str) -> str:
+    # Deduit le type de bien a partir des mots-cles presents dans l'annonce.
+    # Cette inference permet de categoriser meme quand la source ne structure rien.
     value = normalize_for_match(text)
     if any(token in value for token in ["terrain", "ferme", "hectare"]):
         return "land"
@@ -338,6 +398,8 @@ def infer_asset_type(text: str) -> str:
 
 
 def infer_transaction_type(text: str) -> str:
+    # Deduit le type de transaction a partir du vocabulaire de l'annonce.
+    # Vente, location et location courte duree sont traites explicitement.
     value = normalize_for_match(text)
     if any(token in value for token in ["location de vacances", "louer par jour", "loc par jour", "journalier"]):
         return "vacation"
@@ -349,6 +411,8 @@ def infer_transaction_type(text: str) -> str:
 
 
 def extract_location(lines: list[str]) -> tuple[str, str]:
+    # Tente d'extraire la ville et le quartier depuis les lignes de texte utiles.
+    # La recherche exploite d'abord les lignes avec virgule puis les libelles simples.
     for line in lines[:160]:
         if "," not in line or len(line) > 140:
             continue
@@ -383,6 +447,8 @@ def extract_location(lines: list[str]) -> tuple[str, str]:
 
 
 def extract_description(html: str, lines: list[str], title: str) -> str:
+    # Construit une description exploitable pour l'annonce.
+    # La priorite va aux metas, avec repli sur une ligne longue et informative.
     description = extract_meta_content(html, ["description", "og:description", "twitter:description"])
     if description and normalize_for_match(description) != normalize_for_match(title):
         return description[:2000]
@@ -408,6 +474,8 @@ def extract_description(html: str, lines: list[str], title: str) -> str:
 
 
 def extract_first_matching_line(lines: list[str], pattern: str) -> str:
+    # Retourne la premiere ligne qui correspond a un motif cible.
+    # Ce helper est pratique pour isoler une information ponctuelle comme la date publiee.
     regex = re.compile(pattern, re.I)
     for line in lines[:120]:
         if regex.search(line):
@@ -416,6 +484,8 @@ def extract_first_matching_line(lines: list[str], pattern: str) -> str:
 
 
 def extract_image_urls(html: str, base_url: str) -> list[str]:
+    # Extrait les URLs d'images visibles dans les metas et balises img.
+    # Les doublons sont supprimes et la liste est volontairement limitee.
     urls = []
     meta_image = extract_meta_content(html, ["og:image", "twitter:image"])
     if meta_image:
@@ -428,6 +498,8 @@ def extract_image_urls(html: str, base_url: str) -> list[str]:
 
 
 class BaseMarketScraper:
+    # Fournit le socle commun aux scrapers de sources immobilieres.
+    # La classe gere pagination, collecte d'URLs, erreurs reseau et parsing detaille.
     source = ""
     default_url = ""
 
@@ -438,6 +510,8 @@ class BaseMarketScraper:
         user_agent: str = DEFAULT_USER_AGENT,
         timeout: int = 20,
     ):
+        # Initialise les parametres techniques d'un scraper concret.
+        # Les erreurs et compteurs incrementaux sont prepares des la construction.
         self.start_url = start_url or self.default_url
         self.fetcher = fetcher
         self.user_agent = user_agent
@@ -453,6 +527,8 @@ class BaseMarketScraper:
         known_urls: set[str] | None = None,
         stop_after_known: int | None = None,
     ) -> Iterable[ScrapedListing]:
+        # Parcourt les pages sources puis emet les annonces detaillees detectees.
+        # La methode gere limites, doublons, URLs deja connues et erreurs de requete.
         seen_urls: set[str] = set()
         known_url_set = known_urls or set()
         consecutive_known = 0
@@ -500,12 +576,18 @@ class BaseMarketScraper:
                     yield listing
 
     def page_url(self, page: int) -> str:
+        # Retourne l'URL de liste a visiter pour une page donnee.
+        # La classe de base se contente de renvoyer l'URL initiale.
         return self.start_url
 
     def extract_listing_urls(self, html: str, base_url: str) -> list[tuple[str, str]]:
+        # Doit extraire les URLs d'annonces depuis une page liste source.
+        # Chaque scraper concret implemente ici sa logique de detection.
         raise NotImplementedError
 
     def parse_listing(self, html: str, url: str, title_hint: str = "") -> ScrapedListing:
+        # Transforme une page detaillee en objet ScrapedListing normalise.
+        # Les differents helpers d'extraction sont combines dans ce point central.
         lines = html_to_lines(html)
         joined = " ".join(lines[:220])
         line_text = "\n".join(lines[:220])
@@ -542,14 +624,20 @@ class BaseMarketScraper:
         )
 
     def extract_source_id(self, url: str) -> str:
+        # Retourne l'identifiant natif de la source a partir de l'URL.
+        # La classe de base n'impose aucun format et renvoie donc une chaine vide.
         return ""
 
 
 class AvitoScraper(BaseMarketScraper):
+    # Implante le scraping specifique au site Avito.
+    # La classe adapte la pagination, la detection d'URLs et l'extraction d'identifiant.
     source = "avito"
     default_url = AVITO_DEFAULT_URL
 
     def page_url(self, page: int) -> str:
+        # Construit l'URL Avito correspondant a une page de resultats.
+        # Le parametre o est injecte dans la query string a partir de la page 2.
         if page <= 1:
             return self.start_url
         parsed = urlparse(self.start_url)
@@ -558,6 +646,8 @@ class AvitoScraper(BaseMarketScraper):
         return urlunparse(parsed._replace(query=urlencode(query, doseq=True)))
 
     def extract_listing_urls(self, html: str, base_url: str) -> list[tuple[str, str]]:
+        # Repere les URLs detaillees des annonces Avito dans la page liste.
+        # Les liens detectes par le parseur HTML sont completes par une recherche regex.
         candidates = []
         for href, title in extract_anchors(html):
             absolute = urljoin(base_url, href)
@@ -570,15 +660,21 @@ class AvitoScraper(BaseMarketScraper):
         return dedupe_candidates(candidates)
 
     def extract_source_id(self, url: str) -> str:
+        # Extrait l'identifiant Avito present a la fin de l'URL annonce.
+        # Cette cle sert ensuite au suivi et au dedoublonnage secondaire.
         match = re.search(r"_(\d+)\.htm", url)
         return match.group(1) if match else ""
 
 
 class MubawabScraper(BaseMarketScraper):
+    # Implante le scraping specifique au site Mubawab.
+    # La classe connait son format de pagination et le motif de ses URLs detaillees.
     source = "mubawab"
     default_url = MUBAWAB_DEFAULT_URL
 
     def page_url(self, page: int) -> str:
+        # Construit l'URL Mubawab correspondant a la page demandee.
+        # La pagination est injectee dans le chemin plutot que dans la query string.
         if page <= 1:
             return self.start_url
         parsed = urlparse(self.start_url)
@@ -586,6 +682,8 @@ class MubawabScraper(BaseMarketScraper):
         return urlunparse(parsed._replace(path=f"{path}:p:{page}"))
 
     def extract_listing_urls(self, html: str, base_url: str) -> list[tuple[str, str]]:
+        # Repere les URLs detaillees des annonces Mubawab sur une page liste.
+        # Les candidats proviennent a la fois des ancres HTML et d'une recherche regex.
         candidates = []
         for href, title in extract_anchors(html):
             absolute = urljoin(base_url, href)
@@ -598,5 +696,7 @@ class MubawabScraper(BaseMarketScraper):
         return dedupe_candidates(candidates)
 
     def extract_source_id(self, url: str) -> str:
+        # Extrait l'identifiant Mubawab transporte dans l'URL de detail.
+        # Cette information permet de suivre plus facilement l'annonce source.
         match = re.search(r"/fr/a/(\d+)/", url)
         return match.group(1) if match else ""

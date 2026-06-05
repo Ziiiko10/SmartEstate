@@ -1,3 +1,4 @@
+# Configuration centrale de Django: applications, base de donnees, cache et services partages.
 from pathlib import Path
 import os
 from django.core.exceptions import ImproperlyConfigured
@@ -7,6 +8,8 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 
 def load_env_file(path: Path) -> None:
+    # Charge un fichier .env simple et injecte les variables absentes dans l'environnement.
+    # Cette fonction suffit pour les besoins locaux sans dependance supplementaire.
     if not path.exists():
         return
 
@@ -23,6 +26,8 @@ load_env_file(BASE_DIR / ".env")
 
 
 def env_bool(name: str, default: bool = False) -> bool:
+    # Lit une variable d'environnement et la convertit en booleen tolerant.
+    # Les formes courantes comme 1, true, yes ou on sont acceptees.
     value = os.getenv(name)
     if value is None:
         return default
@@ -30,6 +35,8 @@ def env_bool(name: str, default: bool = False) -> bool:
 
 
 def env_list(name: str, default: str = "") -> list[str]:
+    # Decoupe une variable d'environnement en liste de valeurs nettoyees.
+    # Les entrees vides sont ignorees pour eviter des elements parasites.
     raw_value = os.getenv(name, default)
     return [item.strip() for item in raw_value.split(",") if item.strip()]
 
@@ -98,7 +105,7 @@ TEMPLATES = [
 WSGI_APPLICATION = "smartestate_backend.wsgi.application"
 ASGI_APPLICATION = "smartestate_backend.asgi.application"
 
-# Database configuration: prefer DATABASE_URL (Postgres), fallback to sqlite
+# Configuration de la base de donnees: priorite a DATABASE_URL (Postgres), sinon sqlite.
 DATABASE_URL = os.getenv("DATABASE_URL")
 DATABASE_CONN_MAX_AGE = int(os.getenv("DATABASE_CONN_MAX_AGE", "600"))
 DATABASE_SSL_REQUIRE = env_bool("DATABASE_SSL_REQUIRE", MANAGED_SERVICES)
@@ -118,7 +125,7 @@ if DATABASE_URL:
             )
         }
     except Exception:
-        # Minimal fallback parsing if dj_database_url is not available
+        # Repli minimal si dj_database_url n'est pas disponible.
         from urllib.parse import urlparse as _urlparse
 
         _parsed = _urlparse(DATABASE_URL)
@@ -144,7 +151,7 @@ else:
         "DATABASE_URL est requis quand les services manages sont actives ou quand le fallback SQLite est desactive."
     )
 
-# Redis cache: prefer managed Redis, fallback to local memory cache when allowed
+# Cache Redis: priorite au Redis gere, sinon cache memoire local si autorise.
 REDIS_URL = os.getenv("REDIS_URL")
 if REDIS_URL:
     CACHES = {
@@ -169,7 +176,7 @@ else:
 SESSION_ENGINE = "django.contrib.sessions.backends.cached_db"
 SESSION_CACHE_ALIAS = "default"
 
-# Celery broker: default to managed Redis when available
+# Broker Celery: utilise Redis gere par defaut quand il est disponible.
 CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", REDIS_URL or "")
 
 AUTH_PASSWORD_VALIDATORS = [

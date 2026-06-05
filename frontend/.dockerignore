@@ -1,4 +1,7 @@
+# Ignore les dependances et sorties de build regenerees localement.
 node_modules
 dist
 .vite
+
+# Ignore les logs npm transitoires.
 npm-debug.log

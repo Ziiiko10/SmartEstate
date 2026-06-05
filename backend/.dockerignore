@@ -1,9 +1,14 @@
+# Ignore les environnements virtuels locaux qui n'ont rien a faire dans le build.
 .venv
 venv
+
+# Ignore les artefacts Python regeneres automatiquement.
 __pycache__
 *.pyc
 *.pyo
 *.pyd
+
+# Ignore les fichiers de donnees et de logs purement locaux.
 db.sqlite3
 runserver*.log
 staticfiles

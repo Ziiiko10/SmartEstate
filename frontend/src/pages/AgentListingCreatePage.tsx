@@ -1,3 +1,4 @@
+// Creation d'annonce agent: formulaire, galerie locale et previsualisation avant publication.
 import { ChangeEvent, FormEvent, useEffect, useRef, useState } from "react";
 import ImportedPageDocument from "../components/ImportedPageDocument";
 import { formatDh } from "../lib/formatters";
@@ -44,6 +45,7 @@ type SelectedImage = {
   sizeLabel: string;
 };
 
+// Prepare une annonce cote interface en attendant la connexion au flux de publication backend.
 export default function AgentListingCreatePage() {
   const [form, setForm] = useState(defaultForm);
   const [images, setImages] = useState<SelectedImage[]>([]);
@@ -51,20 +53,24 @@ export default function AgentListingCreatePage() {
   const imageInputRef = useRef<HTMLInputElement | null>(null);
   const imageUrlsRef = useRef<string[]>([]);
 
+  // Memorise les URLs temporaires courantes pour pouvoir les liberer proprement.
   useEffect(() => {
     imageUrlsRef.current = images.map((image) => image.previewUrl);
   }, [images]);
 
+  // Nettoie toutes les previews lors du demontage de la page.
   useEffect(() => {
     return () => {
       imageUrlsRef.current.forEach((previewUrl) => URL.revokeObjectURL(previewUrl));
     };
   }, []);
 
+  // Met a jour un champ du formulaire sans dupliquer la logique dans chaque input.
   function updateField<K extends keyof ListingForm>(field: K, value: ListingForm[K]) {
     setForm((current) => ({ ...current, [field]: value }));
   }
 
+  // Transforme les fichiers choisis en apercus locaux et limite la galerie au quota autorise.
   function handleImageSelection(event: ChangeEvent<HTMLInputElement>) {
     const selectedFiles = Array.from(event.target.files ?? []);
     if (selectedFiles.length === 0) {
@@ -91,6 +97,7 @@ export default function AgentListingCreatePage() {
     event.target.value = "";
   }
 
+  // Supprime une image et libere l'URL locale associee.
   function removeImage(imageId: string) {
     setImages((current) => {
       const imageToRemove = current.find((image) => image.id === imageId);
@@ -101,6 +108,7 @@ export default function AgentListingCreatePage() {
     });
   }
 
+  // Simule la preparation de l'annonce tant que l'endpoint final n'est pas branche.
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setMessage(
@@ -287,6 +295,7 @@ export default function AgentListingCreatePage() {
   );
 }
 
+// Champ texte simple reutilise dans la grille des caracteristiques.
 function Field({ label, onChange, value }: { label: string; onChange: (value: string) => void; value: string }) {
   return (
     <label className="block">
@@ -303,6 +312,7 @@ function Field({ label, onChange, value }: { label: string; onChange: (value: st
   );
 }
 
+// Carte compacte affichee dans le panneau de previsualisation.
 function PreviewCard({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-xl bg-white/10 px-4 py-3">

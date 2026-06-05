@@ -1,7 +1,8 @@
+// Annonces ETL: recherche, filtrage et visualisation des biens importes.
 import { useEffect, useState } from "react";
-import MarketListingsMap from "../components/MarketListingsMap";
 import ImportedPageDocument from "../components/ImportedPageDocument";
 import { CardGridSkeleton, MetricCardsSkeleton, SkeletonBlock } from "../components/LoadingState";
+import { MetricCard } from "../components/DashboardWidgets";
 import { useAuth } from "../auth/AuthContext";
 import { apiPrefetch, apiRequest, getErrorMessage } from "../lib/api";
 
@@ -9,8 +10,6 @@ const pageStyles = `.material-symbols-outlined {
             font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
             vertical-align: middle;
         }`;
-
-const MAP_ITEMS_LIMIT = 120;
 
 type MarketListing = {
   area_sqm: string | null;
@@ -51,6 +50,7 @@ type MarketListingFilters = {
 
 const ITEMS_PER_PAGE = 24;
 
+// Traduit l'option de recherche choisie en parametres compatibles avec l'API ETL.
 function applySearchChoice(searchParams: URLSearchParams, searchChoice: string) {
   if (!searchChoice) {
     return;
@@ -72,6 +72,7 @@ function applySearchChoice(searchParams: URLSearchParams, searchChoice: string) 
   }
 }
 
+// Construit l'URL paginee principale selon les filtres actifs.
 function buildListingsPath(params: {
   city: string;
   page: number;
@@ -98,30 +99,7 @@ function buildListingsPath(params: {
   return `/market-listings/?${searchParams.toString()}`;
 }
 
-function buildMapListingsPath(params: {
-  city: string;
-  searchChoice: string;
-  source: string;
-  transaction: string;
-}) {
-  const searchParams = new URLSearchParams({
-    limit: String(MAP_ITEMS_LIMIT),
-  });
-
-  if (params.source !== "all") {
-    searchParams.set("source", params.source);
-  }
-  if (params.transaction !== "all") {
-    searchParams.set("transaction_type", params.transaction);
-  }
-  if (params.city) {
-    searchParams.set("city", params.city);
-  }
-  applySearchChoice(searchParams, params.searchChoice);
-
-  return `/market-listings/?${searchParams.toString()}`;
-}
-
+// Charge les options de filtre disponibles selon la source et la transaction.
 function buildFilterChoicesPath(params: { source: string; transaction: string }) {
   const searchParams = new URLSearchParams();
 
@@ -136,6 +114,7 @@ function buildFilterChoicesPath(params: { source: string; transaction: string })
   return query ? `/market-listings/filters/?${query}` : "/market-listings/filters/";
 }
 
+// Formate les prix des annonces scrapées pour les cartes et tableaux.
 function formatMoney(value: number | string | null | undefined, compact = false) {
   const amount = Number(value ?? 0);
   if (compact && Math.abs(amount) >= 1_000_000) {
@@ -150,6 +129,7 @@ function formatMoney(value: number | string | null | undefined, compact = false)
   })} DH`;
 }
 
+// Rend l'anciennete d'une annonce plus lisible pour un balayage rapide.
 function relativeDate(value: string) {
   if (!value) {
     return "";
@@ -165,6 +145,7 @@ function relativeDate(value: string) {
   }).format(date);
 }
 
+// Traduit le type de transaction expose par l'ETL.
 function transactionLabel(transactionType: string) {
   const labels: Record<string, string> = {
     rent: "Location",
@@ -175,6 +156,7 @@ function transactionLabel(transactionType: string) {
   return labels[transactionType] ?? transactionType;
 }
 
+// Traduit le type de bien brut vers un libelle interface.
 function assetTypeLabel(assetType: string) {
   const labels: Record<string, string> = {
     apartment: "Appartement",
@@ -188,6 +170,7 @@ function assetTypeLabel(assetType: string) {
   return labels[assetType] ?? assetType;
 }
 
+// Attribue un degrade de remplacement quand aucune image n'est disponible.
 function cityGradient(city: string) {
   const palette: Record<string, string> = {
     Casablanca: "from-[#183153] via-[#1b6d24] to-[#89b0ae]",
@@ -199,6 +182,7 @@ function cityGradient(city: string) {
   return palette[city] ?? "from-[#334155] via-[#475569] to-[#94a3b8]";
 }
 
+// Dedoublonne les URLs d'images pour eviter les repetitions dans la galerie.
 function getListingImages(listing: MarketListing) {
   const uniqueImages = new Set<string>();
   const preferredImages = listing.image_urls.length > 0 ? listing.image_urls : [listing.primary_image_url];
@@ -214,10 +198,10 @@ function getListingImages(listing: MarketListing) {
   return Array.from(uniqueImages);
 }
 
+// Regroupe la recherche ETL, les filtres et la pagination des annonces importees.
 export default function MarketListingsPage() {
   const { token } = useAuth();
   const [marketListings, setMarketListings] = useState<MarketListing[]>([]);
-  const [mapListings, setMapListings] = useState<MarketListing[]>([]);
   const [filterChoices, setFilterChoices] = useState<MarketListingFilters>({
     cities: [],
     search_choices: [],
@@ -229,17 +213,18 @@ export default function MarketListingsPage() {
   const [selectedTransaction, setSelectedTransaction] = useState("all");
   const [page, setPage] = useState(1);
   const [error, setError] = useState("");
-  const [mapError, setMapError] = useState("");
   const [isLoading, setIsLoading] = useState(true);
-  const [isMapLoading, setIsMapLoading] = useState(true);
 
+  // Revient a la premiere page des qu'un filtre change pour garder une pagination coherente.
   useEffect(() => {
     setPage(1);
   }, [selectedCity, selectedSearch, selectedSource, selectedTransaction]);
 
+  // Recharge les listes de filtres disponibles en fonction du contexte courant.
   useEffect(() => {
     let active = true;
 
+    // Interroge le endpoint de filtres et nettoie les selections devenues invalides.
     async function loadFilterChoices() {
       try {
         const payload = await apiRequest<MarketListingFilters>(
@@ -283,56 +268,11 @@ export default function MarketListingsPage() {
     };
   }, [selectedCity, selectedSearch, selectedSource, selectedTransaction, token]);
 
+  // Charge la page courante d'annonces et prefetch les pages voisines pour fluidifier la navigation.
   useEffect(() => {
     let active = true;
 
-    async function loadMapListings() {
-      setIsMapLoading(true);
-      setMapError("");
-
-      try {
-        const payload = await apiRequest<MarketListing[]>(
-          buildMapListingsPath({
-            city: selectedCity,
-            searchChoice: selectedSearch,
-            source: selectedSource,
-            transaction: selectedTransaction,
-          }),
-          { token },
-        );
-
-        if (!active) {
-          return;
-        }
-
-        setMapListings(payload);
-      } catch (requestError) {
-        if (!active) {
-          return;
-        }
-
-        setMapError(
-          getErrorMessage(
-            requestError,
-            "Impossible de charger la carte du marché pour le moment.",
-          ),
-        );
-      } finally {
-        if (active) {
-          setIsMapLoading(false);
-        }
-      }
-    }
-
-    void loadMapListings();
-    return () => {
-      active = false;
-    };
-  }, [selectedCity, selectedSearch, selectedSource, selectedTransaction, token]);
-
-  useEffect(() => {
-    let active = true;
-
+    // Recupere la pagination principale cote API.
     async function loadListings() {
       setIsLoading(true);
       setError("");
@@ -403,8 +343,6 @@ export default function MarketListingsPage() {
   const totalPages = Math.max(1, Math.ceil(totalCount / ITEMS_PER_PAGE));
   const currentPage = Math.min(page, totalPages);
   const isInitialLoading = isLoading && totalCount === 0 && marketListings.length === 0 && !error;
-  const displayedMapListings = mapListings.length > 0 ? mapListings : marketListings;
-  const isMapUsingFallback = mapListings.length === 0 && marketListings.length > 0;
 
   return (
     <ImportedPageDocument
@@ -434,14 +372,13 @@ export default function MarketListingsPage() {
 
         {isInitialLoading ? (
           <section className="mb-8">
-            <MetricCardsSkeleton count={4} />
+            <MetricCardsSkeleton count={3} />
           </section>
         ) : (
-          <section className="grid grid-cols-1 lg:grid-cols-4 gap-6 mb-8">
+          <section className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
             <MetricCard label="Annonces filtrées" value={String(totalCount)} />
             <MetricCard label="Page courante" value={`${currentPage} / ${totalPages}`} />
             <MetricCard label="Sources actives" value={selectedSource === "all" ? "2" : "1"} />
-            <MetricCard label="Annonces cartographiées" value={String(displayedMapListings.length)} />
           </section>
         )}
 
@@ -527,14 +464,6 @@ export default function MarketListingsPage() {
             </div>
           </section>
         )}
-
-        <MarketListingsMap
-          error={mapError}
-          isFallbackData={isMapUsingFallback}
-          isLoading={isInitialLoading || (isMapLoading && displayedMapListings.length === 0)}
-          listings={displayedMapListings}
-          selectedCity={selectedCity}
-        />
 
         {isInitialLoading ? (
           <CardGridSkeleton count={6} />
@@ -651,14 +580,5 @@ export default function MarketListingsPage() {
         )}
       </main>
     </ImportedPageDocument>
-  );
-}
-
-function MetricCard({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-2xl bg-surface-container-lowest p-6 shadow-[0_12px_40px_rgba(26,28,29,0.06)]">
-      <p className="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">{label}</p>
-      <p className="mt-3 text-3xl font-headline font-extrabold text-primary">{value}</p>
-    </div>
   );
 }

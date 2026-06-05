@@ -1,10 +1,15 @@
+# Modele des annonces et des donnees de marche importees.
 from django.db import models
 
 from smartestate_backend.model_mixins import TimestampedModel
 
 
 class PropertyAsset(TimestampedModel):
+    # Represente un actif immobilier gere en interne par une organisation.
+    # Le modele stocke ses caracteristiques physiques, financieres et son statut de vie.
     class AssetType(models.TextChoices):
+        # Enumere les grandes familles d'actifs supportees par la plateforme.
+        # Ces choix sont reutilises par les formulaires, filtres et algorithmes.
         APARTMENT = "apartment", "Appartement"
         VILLA = "villa", "Villa"
         OFFICE = "office", "Bureau"
@@ -13,6 +18,8 @@ class PropertyAsset(TimestampedModel):
         HOSPITALITY = "hospitality", "Hospitality"
 
     class Status(models.TextChoices):
+        # Enumere les etats de suivi d'un actif dans le portefeuille.
+        # Le statut pilote ensuite plusieurs vues dashboard et workflows de gestion.
         ACTIVE = "active", "Actif"
         PIPELINE = "pipeline", "Pipeline"
         SOLD = "sold", "Vendu"
@@ -44,18 +51,28 @@ class PropertyAsset(TimestampedModel):
     notes = models.TextField(blank=True)
 
     class Meta:
+        # Trie les actifs par nom pour garder des listes stables et lisibles.
+        # Ce choix est pratique dans l'admin comme dans les selecteurs simples.
         ordering = ["name"]
 
     def __str__(self) -> str:
+        # Retourne le nom metier de l'actif pour les interfaces d'administration.
+        # Cette representation est suffisante dans les listes et journaux usuels.
         return self.name
 
 
 class MarketListing(TimestampedModel):
+    # Represente une annonce de marche importee depuis une source externe.
+    # Le modele conserve la version normalisee ainsi que le payload brut utile au debug.
     class Source(models.TextChoices):
+        # Enumere les plateformes de collecte actuellement supportees.
+        # La source permet de suivre l'origine des donnees et d'adapter le scraping.
         AVITO = "avito", "Avito"
         MUBAWAB = "mubawab", "Mubawab"
 
     class AssetType(models.TextChoices):
+        # Enumere les types de bien detectables dans les annonces de marche.
+        # Une valeur unknown reste disponible quand la source est trop ambigue.
         APARTMENT = "apartment", "Appartement"
         VILLA = "villa", "Villa"
         OFFICE = "office", "Bureau"
@@ -65,6 +82,8 @@ class MarketListing(TimestampedModel):
         UNKNOWN = "unknown", "Inconnu"
 
     class TransactionType(models.TextChoices):
+        # Enumere les modes de transaction identifies pendant le scraping.
+        # Ces choix distinguent vente, location longue duree et location courte duree.
         SALE = "sale", "Vente"
         RENT = "rent", "Location"
         VACATION = "vacation", "Location courte duree"
@@ -100,6 +119,8 @@ class MarketListing(TimestampedModel):
     raw_payload = models.JSONField(default=dict, blank=True)
 
     class Meta:
+        # Defini le tri, l'unicite fonctionnelle et les index utiles aux recherches.
+        # Les contraintes evitent surtout de dupliquer la meme URL dans une source donnee.
         ordering = ["-last_seen_at", "source", "title"]
         constraints = [
             models.UniqueConstraint(
@@ -114,10 +135,14 @@ class MarketListing(TimestampedModel):
         ]
 
     def __str__(self) -> str:
+        # Retourne un resume court combinant la source et le titre de l'annonce.
+        # Ce libelle est pratique dans l'admin et pour les sorties de debug.
         return f"{self.get_source_display()} - {self.title}"
 
     @property
     def image_urls(self) -> list[str]:
+        # Extrait la liste des images de l'annonce depuis le payload JSON brut.
+        # Seules les URLs valides sont retournees pour simplifier la consommation API.
         images = self.raw_payload.get("images", [])
         if not isinstance(images, list):
             return []
@@ -125,4 +150,6 @@ class MarketListing(TimestampedModel):
 
     @property
     def primary_image_url(self) -> str:
+        # Retourne l'image principale de l'annonce quand elle existe.
+        # Cette propriete evite au frontend de refaire ce choix a chaque affichage.
         return self.image_urls[0] if self.image_urls else ""

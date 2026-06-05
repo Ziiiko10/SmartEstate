@@ -1,9 +1,12 @@
+# Serialise les organisations et les liens entre membres.
 from rest_framework import serializers
 
 from apps.organizations.models import Membership, Organization
 
 
 class OrganizationSerializer(serializers.ModelSerializer):
+    # Serialise les organisations exposees par l'API.
+    # Il ajoute aussi le nombre de membres quand le queryset l'annote.
     member_count = serializers.IntegerField(read_only=True)
 
     class Meta:
@@ -23,6 +26,8 @@ class OrganizationSerializer(serializers.ModelSerializer):
 
 
 class MembershipSerializer(serializers.ModelSerializer):
+    # Serialise les memberships avec quelques informations denormalisees utiles au frontend.
+    # Les champs utilisateur et organisation les plus consultes sont exposes en lecture seule.
     user_is_active = serializers.BooleanField(source="user.is_active", read_only=True)
     user_role = serializers.CharField(source="user.role", read_only=True)
     user_name = serializers.CharField(source="user.full_name", read_only=True)

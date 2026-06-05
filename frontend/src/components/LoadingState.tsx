@@ -1,3 +1,5 @@
+// Etats de chargement reutilisables pour l'application et les espaces dashboard.
+// Le module regroupe ecrans pleins, overlays et squelettes de differents formats.
 import { type CSSProperties, useEffect, useMemo, useState } from "react";
 import { useLocation } from "react-router-dom";
 
@@ -8,6 +10,8 @@ export function AppLoadingScreen({
   message?: string;
   subtitle?: string;
 }) {
+  // Affiche un ecran de chargement plein format avec marque SmartEstate.
+  // Il est utilise pendant le bootstrap, les gardes de route et certains changements d'etat.
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-6 text-center text-on-surface">
       <div className="smartestate-loader-surface max-w-md rounded-[28px] px-10 py-10 shadow-[0_24px_60px_rgba(23,32,58,0.1)]">
@@ -26,6 +30,8 @@ export function AppLoadingScreen({
 }
 
 export function RouteTransitionOverlay() {
+  // Affiche un voile de transition bref a chaque changement de route.
+  // L'effet rend la navigation plus lisible pendant le chargement des modules.
   const location = useLocation();
   const [visible, setVisible] = useState(true);
 
@@ -64,10 +70,14 @@ export function SkeletonBlock({
   className?: string;
   style?: CSSProperties;
 }) {
+  // Rend un bloc squelette de base reutilisable dans tous les loaders.
+  // La forme finale depend des classes et styles passes par le parent.
   return <div className={`smartestate-skeleton ${className}`.trim()} style={style} />;
 }
 
 export function MetricCardsSkeleton({ count = 4 }: { count?: number }) {
+  // Simule une grille de cartes KPI pendant l'attente des donnees.
+  // Le nombre de cartes peut etre adapte selon la page.
   return (
     <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
       {Array.from({ length: count }, (_, index) => (
@@ -91,6 +101,8 @@ export function CardGridSkeleton({
   count?: number;
   withImage?: boolean;
 }) {
+  // Simule une grille de cartes visuelles ou de listings.
+  // Le mode withImage permet de couvrir les pages avec ou sans galerie.
   return (
     <div className="grid grid-cols-1 gap-5 xl:grid-cols-2 2xl:grid-cols-3">
       {Array.from({ length: count }, (_, index) => (
@@ -123,6 +135,8 @@ export function TableSkeleton({
   rows?: number;
   columns?: number;
 }) {
+  // Simule un tableau de donnees avec un nombre parametrable de lignes et colonnes.
+  // Les largeurs de colonnes varient legerement pour un rendu plus naturel.
   const columnWidths = useMemo(
     () =>
       Array.from({ length: columns }, (_, index) => {
@@ -167,6 +181,8 @@ export function ChartSkeleton({
   barCount?: number;
   compact?: boolean;
 }) {
+  // Simule un bloc graphique a barres pendant le chargement des statistiques.
+  // Le mode compact sert aux widgets secondaires ou aux espaces reduits.
   return (
     <div className="rounded-2xl bg-white p-6 shadow-sm">
       <SkeletonBlock className="h-7 w-56 rounded-xl" />
@@ -190,6 +206,8 @@ export function ChartSkeleton({
 }
 
 export function AsidePanelsSkeleton({ count = 2 }: { count?: number }) {
+  // Simule une pile de panneaux lateraux complementaires.
+  // Ce loader est souvent combine aux cartes et graphiques du contenu principal.
   return (
     <div className="space-y-6">
       {Array.from({ length: count }, (_, index) => (
@@ -222,6 +240,8 @@ export function DashboardPageLoader({
   showTable?: boolean;
   sidePanelCount?: number;
 }) {
+  // Compose un loader complet pour une grande page de dashboard.
+  // Les sections peuvent etre activees ou reduites selon les besoins de l'ecran.
   return (
     <div className="space-y-8">
       <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
@@ -256,6 +276,8 @@ export function WorkspacePageLoader({
   sidePanelCount?: number;
   showChart?: boolean;
 }) {
+  // Compose un loader pour les pages de travail basees sur formulaires et panneaux.
+  // Le layout imite les espaces de simulation, profil ou edition.
   return (
     <div className="space-y-8">
       <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">

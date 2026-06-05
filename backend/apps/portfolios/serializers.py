@@ -1,9 +1,12 @@
+# Serialise les portefeuilles et leurs positions associées.
 from rest_framework import serializers
 
 from apps.portfolios.models import Portfolio, PortfolioHolding
 
 
 class PortfolioSerializer(serializers.ModelSerializer):
+    # Serialise les portefeuilles exposes par l'API.
+    # Le nom de l'organisation est ajoute en lecture seule pour le frontend.
     organization_name = serializers.CharField(source="organization.name", read_only=True)
 
     class Meta:
@@ -26,6 +29,8 @@ class PortfolioSerializer(serializers.ModelSerializer):
 
 
 class PortfolioHoldingSerializer(serializers.ModelSerializer):
+    # Serialise les lignes d'allocation d'un portefeuille.
+    # Quelques informations denormalisees sur l'actif et le portefeuille sont ajoutees.
     portfolio_name = serializers.CharField(source="portfolio.name", read_only=True)
     asset_name = serializers.CharField(source="asset.name", read_only=True)
     asset_city = serializers.CharField(source="asset.city", read_only=True)

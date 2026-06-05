@@ -1,6 +1,7 @@
 from django.db import migrations, models
 
 
+# Migration de normalisation des anciens roles utilisateurs.
 def map_existing_roles(apps, schema_editor):
     User = apps.get_model("accounts", "User")
     role_mapping = {

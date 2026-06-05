@@ -1,10 +1,15 @@
+# Donnees et objets metier relies a l'IA immobiliere.
 from django.db import models
 
 from smartestate_backend.model_mixins import TimestampedModel
 
 
 class Scenario(TimestampedModel):
+    # Represente un scenario d'investissement ou d'exploitation projete.
+    # Le modele stocke les hypotheses principales et les indicateurs resultat.
     class Strategy(models.TextChoices):
+        # Enumere les grandes strategies prises en charge par la simulation.
+        # Ces valeurs facilitent les filtres, statistiques et parcours frontend.
         LONG_TERM = "long_term", "Longue duree"
         SEASONAL = "seasonal", "Saisonnier"
         FLIP = "flip", "Achat revente"
@@ -35,14 +40,22 @@ class Scenario(TimestampedModel):
     notes = models.TextField(blank=True)
 
     class Meta:
+        # Trie les scenarios du plus recent au plus ancien.
+        # Ce choix colle au besoin de consulter d'abord les derniers calculs.
         ordering = ["-created_at"]
 
     def __str__(self) -> str:
+        # Retourne le titre du scenario pour l'admin et les journaux applicatifs.
+        # Ce libelle est suffisant pour reconnaitre rapidement une simulation.
         return self.title
 
 
 class Valuation(TimestampedModel):
+    # Represente une estimation immobiliere sauvegardee par le backend.
+    # Le modele conserve la fourchette, la confiance et le payload d'entree.
     class Status(models.TextChoices):
+        # Enumere les etats de vie d'une estimation enregistree.
+        # La valeur completed couvre les valuations produites et finalisees.
         DRAFT = "draft", "Brouillon"
         COMPLETED = "completed", "Complete"
 
@@ -76,25 +89,37 @@ class Valuation(TimestampedModel):
     summary = models.TextField(blank=True)
 
     class Meta:
+        # Trie les estimations des plus recentes aux plus anciennes.
+        # Cela met les dernieres analyses en tete des vues et de l'admin.
         ordering = ["-created_at"]
 
     def __str__(self) -> str:
+        # Retourne le titre de l'estimation pour les interfaces d'administration.
+        # Le titre suffit a resumer l'analyse dans les listes.
         return self.title
 
 
 class Recommendation(TimestampedModel):
+    # Represente une recommandation d'action produite pour un actif ou une organisation.
+    # Le modele porte aussi sa priorite, son statut et le ROI attendu.
     class Category(models.TextChoices):
+        # Enumere les familles de recommandations suivies par la plateforme.
+        # Chaque categorie aide a regrouper les actions par objectif metier.
         ACQUISITION = "acquisition", "Acquisition"
         DISPOSITION = "disposition", "Disposition"
         OPTIMIZATION = "optimization", "Optimization"
         RISK = "risk", "Risk"
 
     class Priority(models.TextChoices):
+        # Enumere les niveaux d'urgence associes a une recommandation.
+        # Le tri du modele s'appuie ensuite sur cette priorite.
         LOW = "low", "Low"
         MEDIUM = "medium", "Medium"
         HIGH = "high", "High"
 
     class Status(models.TextChoices):
+        # Enumere les etats de traitement d'une recommandation.
+        # Cela permet de suivre si l'action est ouverte, acceptee ou rejetee.
         OPEN = "open", "Open"
         IN_PROGRESS = "in_progress", "In Progress"
         ACCEPTED = "accepted", "Accepted"
@@ -122,20 +147,30 @@ class Recommendation(TimestampedModel):
     action_items = models.JSONField(default=list, blank=True)
 
     class Meta:
+        # Trie les recommandations par priorite puis par date recente.
+        # Les actions les plus urgentes remontent ainsi naturellement en premier.
         ordering = ["priority", "-created_at"]
 
     def __str__(self) -> str:
+        # Retourne le titre de la recommandation.
+        # Ce texte est utilise comme resume rapide dans les listes et l'admin.
         return self.title
 
 
 class Report(TimestampedModel):
+    # Represente un rapport genere pour un actif, un portefeuille ou le marche.
+    # Le modele suit son type, son statut, son fichier et ses metadonnees.
     class ReportType(models.TextChoices):
+        # Enumere les types de rapports que la plateforme sait produire.
+        # Cette categorisation facilite ensuite la navigation et les filtres.
         MARKET = "market", "Market"
         PORTFOLIO = "portfolio", "Portfolio"
         FINANCIAL = "financial", "Financial"
         RISK = "risk", "Risk"
 
     class Status(models.TextChoices):
+        # Enumere les etats de production possibles pour un rapport.
+        # Le frontend peut s'appuyer dessus pour informer l'utilisateur.
         GENERATING = "generating", "Generating"
         READY = "ready", "Ready"
         ARCHIVED = "archived", "Archived"
@@ -174,7 +209,11 @@ class Report(TimestampedModel):
     metadata = models.JSONField(default=dict, blank=True)
 
     class Meta:
+        # Trie les rapports par ordre antichronologique.
+        # Les derniers exports generes restent ainsi les plus visibles.
         ordering = ["-created_at"]
 
     def __str__(self) -> str:
+        # Retourne le titre du rapport pour les listes et outils d'administration.
+        # Cela suffit a reconnaitre le contenu sans ouvrir le detail.
         return self.title

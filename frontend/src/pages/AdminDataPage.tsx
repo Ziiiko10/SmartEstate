@@ -1,5 +1,7 @@
+// Vue de controle pour les donnees geographiques et la couverture des filtres.
 import { useEffect, useState } from "react";
 import ImportedPageDocument from "../components/ImportedPageDocument";
+import { MetricCard } from "../components/DashboardWidgets";
 import { useAuth } from "../auth/AuthContext";
 import { apiRequest, getErrorMessage } from "../lib/api";
 
@@ -14,14 +16,20 @@ type FiltersPayload = {
 };
 
 export default function AdminDataPage() {
+  // Affiche la console admin de donnees immobilieres et de synchronisation ETL.
+  // La page permet d'observer les filtres disponibles et de lancer des imports.
   const { token } = useAuth();
   const [filters, setFilters] = useState<FiltersPayload>({ cities: [], districts: [] });
   const [error, setError] = useState("");
 
   useEffect(() => {
+    // Charge les villes et quartiers exposes par les facettes backend.
+    // Les donnees alimentent ensuite les cartes de couverture de cette page.
     let active = true;
 
     async function loadData() {
+      // Recupere le payload de filtres depuis l'API d'annonces ETL.
+      // En cas d'echec, un message lisible est prepare pour l'administrateur.
       try {
         const payload = await apiRequest<FiltersPayload>("/market-listings/filters/", { token });
         if (active) {
@@ -105,14 +113,5 @@ export default function AdminDataPage() {
         </section>
       </main>
     </ImportedPageDocument>
-  );
-}
-
-function MetricCard({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-2xl bg-white p-6 shadow-sm">
-      <p className="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">{label}</p>
-      <p className="mt-3 text-3xl font-headline font-extrabold text-primary">{value}</p>
-    </div>
   );
 }

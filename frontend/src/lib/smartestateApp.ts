@@ -1,3 +1,4 @@
+// Catalogue central des routes et des espaces fonctionnels de SmartEstate.
 export const APP_ROUTES = {
   home: "/",
   login: "/connexion",
@@ -70,6 +71,8 @@ export type LoginRedirectState = {
 };
 
 export function buildMailtoHref(subject: string, body: string) {
+  // Construit une URL mailto complete vers le support SmartEstate.
+  // Le sujet et le corps sont encodes pour rester valides dans le navigateur.
   const params = new URLSearchParams({
     subject,
     body,

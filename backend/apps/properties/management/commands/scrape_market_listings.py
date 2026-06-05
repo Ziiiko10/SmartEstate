@@ -1,3 +1,4 @@
+# Commande de lancement du scraping et de la synchro des annonces de marche.
 import time
 
 from django.core.management.base import BaseCommand, CommandError
@@ -7,9 +8,13 @@ from apps.properties.etl.scrapers import AVITO_DEFAULT_URL, MUBAWAB_DEFAULT_URL
 
 
 class Command(BaseCommand):
+    # Expose la commande CLI de scraping des annonces de marche.
+    # Elle permet de piloter l'ETL sans passer par l'endpoint HTTP d'administration.
     help = "Scrape les annonces immobilieres Avito et Mubawab puis les charge en base."
 
     def add_arguments(self, parser):
+        # Declare les options disponibles pour regler le comportement du scraping.
+        # Chaque argument permet d'ajuster le volume, le rythme et les filtres ETL.
         parser.add_argument(
             "--source",
             choices=["all", "avito", "mubawab"],
@@ -50,6 +55,8 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
+        # Valide les options puis lance un ou plusieurs cycles ETL.
+        # En mode loop, la commande reste active et planifie les executions suivantes.
         if options["pages"] < 1:
             raise CommandError("--pages doit etre superieur ou egal a 1.")
         if options["limit"] is not None and options["limit"] < 1:

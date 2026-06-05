@@ -1,3 +1,4 @@
+// Prefetch intelligent des routes et donnees associees pour accelerer la navigation.
 import { lazy, type ComponentType, type LazyExoticComponent } from "react";
 import { apiPrefetch } from "./api";
 import { APP_ROUTES } from "./smartestateApp";
@@ -17,6 +18,8 @@ type PrefetchOptions = {
 function lazyWithPreload<T extends ComponentType<any>>(
   loader: () => Promise<ModuleWithDefault<T>>,
 ): PreloadableComponent<T> {
+  // Etend React.lazy avec une methode preload reutilisable hors rendu.
+  // Le meme loader peut ainsi servir au code splitting et au prechargement anticipe.
   const LazyComponent = lazy(loader) as PreloadableComponent<T>;
   LazyComponent.preload = loader;
   return LazyComponent;
@@ -29,12 +32,10 @@ const pageLoaders = {
   adminLocations: () => import("../pages/AdminLocationsPage"),
   adminMlModel: () => import("../pages/AdminMlModelPage"),
   adminSettings: () => import("../pages/AdminSettingsPage"),
-  adminStatistics: () => import("../pages/AdminStatisticsPage"),
   adminUsers: () => import("../pages/AdminUsersPage"),
   agentClientRequests: () => import("../pages/AgentClientRequestsPage"),
   agentListingCreate: () => import("../pages/AgentListingCreatePage"),
   agentListings: () => import("../pages/AgentListingsPage"),
-  agentStatistics: () => import("../pages/AgentStatisticsPage"),
   aiEstimation: () => import("../pages/AiEstimationPage"),
   aiRecommendations: () => import("../pages/AiRecommendationsPage"),
   executiveDashboard: () => import("../pages/ExecutiveDashboardPage"),
@@ -54,12 +55,10 @@ export const LazyAdminListingsPage = lazyWithPreload(pageLoaders.adminListings);
 export const LazyAdminLocationsPage = lazyWithPreload(pageLoaders.adminLocations);
 export const LazyAdminMlModelPage = lazyWithPreload(pageLoaders.adminMlModel);
 export const LazyAdminSettingsPage = lazyWithPreload(pageLoaders.adminSettings);
-export const LazyAdminStatisticsPage = lazyWithPreload(pageLoaders.adminStatistics);
 export const LazyAdminUsersPage = lazyWithPreload(pageLoaders.adminUsers);
 export const LazyAgentClientRequestsPage = lazyWithPreload(pageLoaders.agentClientRequests);
 export const LazyAgentListingCreatePage = lazyWithPreload(pageLoaders.agentListingCreate);
 export const LazyAgentListingsPage = lazyWithPreload(pageLoaders.agentListings);
-export const LazyAgentStatisticsPage = lazyWithPreload(pageLoaders.agentStatistics);
 export const LazyAiEstimationPage = lazyWithPreload(pageLoaders.aiEstimation);
 export const LazyAiRecommendationsPage = lazyWithPreload(pageLoaders.aiRecommendations);
 export const LazyExecutiveDashboardPage = lazyWithPreload(pageLoaders.executiveDashboard);
@@ -87,14 +86,12 @@ const routeDefinitions = [
   { path: APP_ROUTES.agentListings, preload: LazyAgentListingsPage.preload },
   { path: APP_ROUTES.agentNewListing, preload: LazyAgentListingCreatePage.preload },
   { path: APP_ROUTES.agentRequests, preload: LazyAgentClientRequestsPage.preload },
-  { path: APP_ROUTES.agentStats, preload: LazyAgentStatisticsPage.preload },
   { path: APP_ROUTES.adminUsers, preload: LazyAdminUsersPage.preload },
   { path: APP_ROUTES.adminAgents, preload: LazyAdminAgentsPage.preload },
   { path: APP_ROUTES.adminListings, preload: LazyAdminListingsPage.preload },
   { path: APP_ROUTES.adminLocations, preload: LazyAdminLocationsPage.preload },
   { path: APP_ROUTES.adminData, preload: LazyAdminDataPage.preload },
   { path: APP_ROUTES.adminModel, preload: LazyAdminMlModelPage.preload },
-  { path: APP_ROUTES.adminStats, preload: LazyAdminStatisticsPage.preload },
   { path: APP_ROUTES.adminSettings, preload: LazyAdminSettingsPage.preload },
   { path: APP_ROUTES.login, preload: LazyLoginPage.preload },
   { path: APP_ROUTES.signup, preload: LazySignupPage.preload },
@@ -103,6 +100,8 @@ const routeDefinitions = [
 ] as const;
 
 function canPrefetchInBackground() {
+  // Decide si le prefetch en arriere-plan est acceptable sur ce terminal.
+  // Les connexions economes ou tres lentes sont epargnees pour limiter la charge.
   if (typeof navigator === "undefined") {
     return true;
   }
@@ -126,6 +125,8 @@ function canPrefetchInBackground() {
 }
 
 function matchesPath(currentPath: string, routePath: string) {
+  // Verifie si un chemin courant correspond a une route definie.
+  // La page d'accueil reste un cas particulier pour eviter les faux positifs.
   if (routePath === APP_ROUTES.home) {
     return currentPath === routePath;
   }
@@ -134,10 +135,14 @@ function matchesPath(currentPath: string, routePath: string) {
 }
 
 function resolveRouteDefinition(path: string) {
+  // Associe un chemin a sa definition de prechargement connue.
+  // La fonction renvoie null quand aucune route prefetchable ne correspond.
   return routeDefinitions.find((definition) => matchesPath(path, definition.path)) ?? null;
 }
 
 async function prefetchRouteData(path: string, token?: null | string) {
+  // Prefetche les donnees API les plus probables pour une route donnee.
+  // Chaque espace de l'application peut ainsi chauffer ses ressources critiques.
   switch (path) {
     case APP_ROUTES.userEstimation:
     case APP_ROUTES.agentEstimation:
@@ -153,12 +158,10 @@ async function prefetchRouteData(path: string, token?: null | string) {
       ]);
       return;
     case APP_ROUTES.agentDashboard:
-    case APP_ROUTES.adminDashboard:
-    case APP_ROUTES.adminStats:
-      await apiPrefetch("/dashboard/overview/", { token });
-      return;
-    case APP_ROUTES.agentStats:
       await apiPrefetch("/dashboard/overview/?include_opportunities=1", { token });
+      return;
+    case APP_ROUTES.adminDashboard:
+      await apiPrefetch("/dashboard/overview/", { token });
       return;
     case APP_ROUTES.marketListings:
     case APP_ROUTES.adminListings:
@@ -183,6 +186,8 @@ async function prefetchRouteData(path: string, token?: null | string) {
 }
 
 export async function prefetchRoute(path: string, options: PrefetchOptions = {}) {
+  // Prefetche a la fois le module React et les donnees principales d'une route.
+  // Le mecanisme s'arrete proprement si la connexion ne s'y prete pas.
   if (!canPrefetchInBackground()) {
     return;
   }
@@ -209,5 +214,4 @@ export const authenticatedWorkspacePrefetchRoutes = [
   APP_ROUTES.adminDashboard,
   APP_ROUTES.adminUsers,
   APP_ROUTES.adminListings,
-  APP_ROUTES.adminStats,
 ] as const;

@@ -1,3 +1,4 @@
+// Administration des utilisateurs: recherche, filtres et mise a jour des comptes.
 import { useEffect, useMemo, useState } from "react";
 import ImportedPageDocument from "../components/ImportedPageDocument";
 import { useAuth } from "../auth/AuthContext";
@@ -20,6 +21,7 @@ type ManagedUser = {
   role: string;
 };
 
+// Pilote la liste des utilisateurs, les filtres d'administration et les mises a jour rapides.
 export default function AdminUsersPage() {
   const { token } = useAuth();
   const [users, setUsers] = useState<ManagedUser[]>([]);
@@ -29,9 +31,11 @@ export default function AdminUsersPage() {
   const [error, setError] = useState("");
   const [pendingUserId, setPendingUserId] = useState<number | null>(null);
 
+  // Charge les comptes visibles au montage afin d'alimenter le tableau d'administration.
   useEffect(() => {
     let active = true;
 
+    // Recupere la liste brute des utilisateurs depuis l'API securisee.
     async function loadUsers() {
       try {
         const payload = await apiRequest<ManagedUser[]>("/users/", { token });
@@ -51,6 +55,7 @@ export default function AdminUsersPage() {
     };
   }, [token]);
 
+  // Combine recherche texte et filtre de role pour n'afficher que les comptes utiles.
   const filteredUsers = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
     return users.filter((user) => {
@@ -66,6 +71,7 @@ export default function AdminUsersPage() {
     });
   }, [query, selectedRole, users]);
 
+  // Applique une modification partielle sur un compte puis resynchronise la ligne locale.
   async function patchUser(id: number, payload: Partial<ManagedUser>) {
     setPendingUserId(id);
     setMessage("");

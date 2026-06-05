@@ -1,5 +1,8 @@
+// Console de supervision du modele Machine Learning et de ses actions.
 import { useState } from "react";
 import ImportedPageDocument from "../components/ImportedPageDocument";
+import { MetricCard } from "../components/DashboardWidgets";
+import { ActionButton } from "../components/PageWidgets";
 
 const pageStyles = `.material-symbols-outlined {
             font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
@@ -7,6 +10,8 @@ const pageStyles = `.material-symbols-outlined {
         }`;
 
 export default function AdminMlModelPage() {
+  // Affiche l'espace admin de suivi du modele de machine learning.
+  // La page synthetise les signaux de sante et les actions de supervision.
   const [message, setMessage] = useState("");
 
   return (
@@ -65,22 +70,5 @@ export default function AdminMlModelPage() {
         </section>
       </main>
     </ImportedPageDocument>
-  );
-}
-
-function MetricCard({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-2xl bg-white p-6 shadow-sm">
-      <p className="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">{label}</p>
-      <p className="mt-3 text-3xl font-headline font-extrabold text-primary">{value}</p>
-    </div>
-  );
-}
-
-function ActionButton({ label, onClick }: { label: string; onClick: () => void }) {
-  return (
-    <button className="w-full rounded-xl bg-white/10 px-4 py-3 text-left text-sm font-bold text-white" type="button" onClick={onClick}>
-      {label}
-    </button>
   );
 }

@@ -1,3 +1,4 @@
+// Portefeuille immobilier: consolide actifs, holdings et statistiques visibles depuis la base.
 import { startTransition, useEffect, useMemo, useState } from "react";
 import ImportedPageDocument from "../components/ImportedPageDocument";
 import { DashboardPageLoader } from "../components/LoadingState";
@@ -71,6 +72,7 @@ const emptyOverview: DashboardOverview = {
   total_asset_value: 0,
 };
 
+// Formate les montants du portefeuille pour les tuiles et les listes.
 function formatMoney(value: number | string | null | undefined, compact = false) {
   const amount = Number(value ?? 0);
   if (compact && Math.abs(amount) >= 1_000_000) {
@@ -85,6 +87,7 @@ function formatMoney(value: number | string | null | undefined, compact = false)
   })} DH`;
 }
 
+// Uniformise l'affichage des rendements et taux d'occupation.
 function formatPercent(value: number | string | null | undefined) {
   return `${Number(value ?? 0).toLocaleString("fr-MA", {
     maximumFractionDigits: 1,
@@ -92,6 +95,7 @@ function formatPercent(value: number | string | null | undefined) {
   })}%`;
 }
 
+// Donne une identite visuelle de secours a chaque ville couverte.
 function cityGradient(city: string) {
   const palette: Record<string, string> = {
     Casablanca: "from-[#183153] via-[#1b6d24] to-[#89b0ae]",
@@ -102,6 +106,7 @@ function cityGradient(city: string) {
   return palette[city] ?? "from-[#334155] via-[#475569] to-[#94a3b8]";
 }
 
+// Traduit les statuts d'actifs vers un vocabulaire lisible.
 function statusLabel(status: string) {
   const labels: Record<string, string> = {
     active: "Actif",
@@ -112,6 +117,7 @@ function statusLabel(status: string) {
   return labels[status] ?? status;
 }
 
+// Traduit les familles d'actifs dans le libelle metier attendu.
 function assetTypeLabel(assetType: string) {
   const labels: Record<string, string> = {
     apartment: "Appartement",
@@ -124,6 +130,7 @@ function assetTypeLabel(assetType: string) {
   return labels[assetType] ?? assetType;
 }
 
+// Agrege portefeuilles, holdings et actifs pour composer la vue patrimoine.
 export default function PortfolioMarocPage() {
   const { token } = useAuth();
   const [assets, setAssets] = useState<Asset[]>([]);
@@ -133,9 +140,11 @@ export default function PortfolioMarocPage() {
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(true);
 
+  // Charge les portefeuilles, holdings, actifs et KPI globaux en une seule passe.
   useEffect(() => {
     let active = true;
 
+    // Reunit les quatre endpoints de reference du module patrimoine.
     async function loadData() {
       setIsLoading(true);
       setError("");
@@ -177,6 +186,7 @@ export default function PortfolioMarocPage() {
     };
   }, [token]);
 
+  // Indexe les holdings par actif pour enrichir chaque carte sans recalcul couteux.
   const holdingsByAssetId = useMemo(
     () => new Map(holdings.map((holding) => [holding.asset, holding])),
     [holdings],
@@ -390,6 +400,7 @@ export default function PortfolioMarocPage() {
   );
 }
 
+// Affiche une statistique compacte dans le bloc geographique principal.
 function StatPanel({ label, value }: { label: string; value: string }) {
   return (
     <div className="glass-panel rounded-xl border border-white/40 px-5 py-4">
@@ -399,6 +410,7 @@ function StatPanel({ label, value }: { label: string; value: string }) {
   );
 }
 
+// Carte de metrique hero adaptee a cette page portfolio.
 function MetricCard({
   helper,
   label,
@@ -426,6 +438,7 @@ function MetricCard({
   );
 }
 
+// Cellule detaillee pour les caracteristiques d'un actif.
 function DataCell({ label, value }: { label: string; value: string }) {
   return (
     <div className="bg-surface-container-low/50 p-3 rounded-lg">

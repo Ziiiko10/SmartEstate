@@ -1,3 +1,4 @@
+# Administration Django des annonces et actifs immobiliers.
 from django.contrib import admin
 
 from apps.properties.models import MarketListing, PropertyAsset
@@ -5,6 +6,8 @@ from apps.properties.models import MarketListing, PropertyAsset
 
 @admin.register(PropertyAsset)
 class PropertyAssetAdmin(admin.ModelAdmin):
+    # Configure l'affichage des actifs immobiliers dans l'administration Django.
+    # Les colonnes selectionnees privilegient la valeur, la localisation et le statut.
     list_display = ("name", "organization", "asset_type", "city", "current_value", "status")
     list_filter = ("asset_type", "status", "city", "organization")
     search_fields = ("name", "city", "district", "address")
@@ -12,6 +15,8 @@ class PropertyAssetAdmin(admin.ModelAdmin):
 
 @admin.register(MarketListing)
 class MarketListingAdmin(admin.ModelAdmin):
+    # Configure l'ecran admin des annonces importees depuis le marche.
+    # Les filtres aident a explorer rapidement les listings par source et transaction.
     list_display = (
         "title",
         "source",
