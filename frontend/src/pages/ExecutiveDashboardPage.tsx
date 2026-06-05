@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import ImportedPageDocument from "../components/ImportedPageDocument";
 import { DashboardPageLoader } from "../components/LoadingState";
@@ -469,11 +469,6 @@ function AdminDashboardContent({
   dashboard: DashboardOverview;
   navigate: ReturnType<typeof useNavigate>;
 }) {
-  const userRoleChartItems = dashboard.user_roles.map((item, index) => ({
-    color: CHART_COLORS[index % CHART_COLORS.length],
-    label: item.label,
-    value: item.count,
-  }));
   const marketTransactionChartItems = dashboard.market_transactions.map((item, index) => ({
     color: CHART_COLORS[index % CHART_COLORS.length],
     label: item.label,
@@ -485,6 +480,33 @@ function AdminDashboardContent({
     secondary: `${city.listing_count ?? 0} annonces`,
     value: Number(city.average_price ?? 0),
   }));
+  // Resume les 4 KPI principaux affiches dans les cartes de tete du dashboard admin.
+  const adminPriorityItems = [
+    {
+      color: "#2563eb",
+      label: "Utilisateurs",
+      secondary: "Comptes crees sur la plateforme",
+      value: dashboard.users_total,
+    },
+    {
+      color: "#0f766e",
+      label: "Agents immobiliers",
+      secondary: "Agents actuellement references",
+      value: dashboard.total_agents,
+    },
+    {
+      color: "#f59e0b",
+      label: "Annonces",
+      secondary: "Volume global des annonces",
+      value: dashboard.total_listings,
+    },
+    {
+      color: "#7c3aed",
+      label: "En attente",
+      secondary: "Annonces a valider rapidement",
+      value: dashboard.pending_listings_count,
+    },
+  ];
 
   const topStats = [
     { label: "Nombre total d'utilisateurs", value: dashboard.users_total.toLocaleString("fr-MA") },
@@ -509,25 +531,28 @@ function AdminDashboardContent({
           subtitle="Deux graphiques horizontaux minimum sont affiches ici avec des donnees live."
           title="Graphiques temps reel"
         />
-        <div className="mt-6 grid grid-cols-1 gap-8 xl:grid-cols-[minmax(0,1.2fr)_420px]">
-          <LineChartCard
-            lines={[
-              { color: "#2563eb", key: "market_updates", label: "Mises a jour ETL" },
-              { color: "#0f766e", key: "valuations", label: "Estimations" },
-              { color: "#f59e0b", key: "assets", label: "Nouvelles annonces internes" },
-              { color: "#7c3aed", key: "users", label: "Nouveaux utilisateurs" },
-            ]}
-            points={dashboard.activity_series}
-            subtitle="Volume d'activite observe sur les 7 derniers jours."
-            title="Flux live de la plateforme"
-          />
-          <DonutChartCard
-            centerLabel="Utilisateurs"
-            centerValue={formatCount(dashboard.users_total)}
-            items={userRoleChartItems}
-            subtitle="Repartition actuelle des profils connectables."
-            title="Repartition des roles"
-          />
+        <div className="mt-6 grid grid-cols-1 gap-10 xl:grid-cols-2">
+          <ChartBlock tone="blue">
+            <LineChartCard
+              lines={[
+                { color: "#2563eb", key: "market_updates", label: "Mises a jour ETL" },
+                { color: "#0f766e", key: "valuations", label: "Estimations" },
+                { color: "#f59e0b", key: "assets", label: "Nouvelles annonces internes" },
+                { color: "#7c3aed", key: "users", label: "Nouveaux utilisateurs" },
+              ]}
+              points={dashboard.activity_series}
+              subtitle="Volume d'activite observe sur les 7 derniers jours."
+              title="Flux live de la plateforme"
+            />
+          </ChartBlock>
+          <ChartBlock tone="amber">
+            <HorizontalBarChartCard
+              formatter={(value) => formatCount(value)}
+              items={adminPriorityItems}
+              subtitle="Synthese immediate des 4 indicateurs les plus importants du dashboard admin."
+              title="Indicateurs prioritaires"
+            />
+          </ChartBlock>
         </div>
         <div className="mt-8 grid grid-cols-1 gap-8 xl:grid-cols-2">
           <HorizontalBarChartCard
@@ -824,11 +849,7 @@ function AgentDashboardContent({
   dashboard: DashboardOverview;
   navigate: ReturnType<typeof useNavigate>;
 }) {
-  const assetStatusChartItems = dashboard.asset_statuses.map((item, index) => ({
-    color: CHART_COLORS[index % CHART_COLORS.length],
-    label: item.label,
-    value: item.count,
-  }));
+  // Transforme les agregats du backend en formats directement exploitables par les charts.
   const agentCityChartItems = dashboard.top_cities.map((item, index) => ({
     color: CHART_COLORS[index % CHART_COLORS.length],
     label: item.city,
@@ -839,11 +860,39 @@ function AgentDashboardContent({
     label: item.city,
     value: item.count,
   }));
+  // Resume les 4 KPI principaux affiches dans les cartes de tete du dashboard agent.
+  const priorityPerformanceItems = [
+    {
+      color: "#2563eb",
+      label: "Mes annonces",
+      secondary: "Volume total de biens suivis",
+      value: dashboard.assets,
+    },
+    {
+      color: "#0f766e",
+      label: "Annonces actives",
+      secondary: "Biens actuellement disponibles",
+      value: dashboard.active_assets,
+    },
+    {
+      color: "#f59e0b",
+      label: "Demandes clients",
+      secondary: "Contacts recus a traiter",
+      value: dashboard.client_requests_count,
+    },
+    {
+      color: "#7c3aed",
+      label: "Estimations",
+      secondary: "Estimations deja realisees",
+      value: dashboard.valuations,
+    },
+  ];
   const districtSignalItems = dashboard.top_market_districts.map((item, index) => ({
     color: CHART_COLORS[index % CHART_COLORS.length],
     label: item.district,
     value: item.listing_count,
   }));
+  // Calcule les volumes utiles au resume de performance de l'agent.
   const totalTrackedViews = dashboard.top_viewed_assets.reduce(
     (sum, asset) => sum + Number(asset.views_count ?? 0),
     0,
@@ -862,11 +911,10 @@ function AgentDashboardContent({
         })}%`
       : "Non calculable";
 
+  // Limite volontairement les KPI du haut a 4 cartes pour garder une lecture immediate.
   const topStats = [
     { label: "Nombre total de mes annonces", value: dashboard.assets.toLocaleString("fr-MA") },
     { label: "Nombre d'annonces actives", value: dashboard.active_assets.toLocaleString("fr-MA") },
-    { label: "Nombre d'annonces vendues", value: dashboard.sold_assets.toLocaleString("fr-MA") },
-    { label: "Nombre d'annonces louees", value: dashboard.rented_assets.toLocaleString("fr-MA") },
     { label: "Nombre de demandes clients recues", value: dashboard.client_requests_count.toLocaleString("fr-MA") },
     { label: "Nombre d'estimations realisees", value: dashboard.valuations.toLocaleString("fr-MA") },
   ];
@@ -878,7 +926,7 @@ function AgentDashboardContent({
           subtitle="Vue sur l'activite commerciale personnelle de l'agent."
           title="Cartes statistiques principales"
         />
-        <div className="mt-6 grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="mt-6 grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
           {topStats.map((item) => (
             <MetricCard key={item.label} label={item.label} value={item.value} />
           ))}
@@ -890,25 +938,30 @@ function AgentDashboardContent({
           subtitle="Graphiques relies aux donnees visibles par l'agent et rafraichis automatiquement."
           title="Graphiques temps reel"
         />
-        <div className="mt-6 grid grid-cols-1 gap-8 xl:grid-cols-[minmax(0,1.2fr)_420px]">
-          <LineChartCard
-            lines={[
-              { color: "#0f766e", key: "assets", label: "Annonces creees" },
-              { color: "#2563eb", key: "valuations", label: "Estimations" },
-              { color: "#f59e0b", key: "market_updates", label: "Mises a jour marche" },
-            ]}
-            points={dashboard.activity_series}
-            subtitle="Activite observee sur les 7 derniers jours dans votre perimetre."
-            title="Flux live de votre activite"
-          />
-          <DonutChartCard
-            centerLabel="Mes annonces"
-            centerValue={formatCount(dashboard.assets)}
-            items={assetStatusChartItems}
-            subtitle="Repartition de vos annonces par statut actuel."
-            title="Statut de mes annonces"
-          />
+        {/* Premiere ligne: tendance dans le temps + synthese directe des KPI prioritaires. */}
+        <div className="mt-6 grid grid-cols-1 gap-10 xl:grid-cols-2">
+          <ChartBlock tone="blue">
+            <LineChartCard
+              lines={[
+                { color: "#0f766e", key: "assets", label: "Annonces creees" },
+                { color: "#2563eb", key: "valuations", label: "Estimations" },
+                { color: "#f59e0b", key: "market_updates", label: "Mises a jour marche" },
+              ]}
+              points={dashboard.activity_series}
+              subtitle="Activite observee sur les 7 derniers jours dans votre perimetre."
+              title="Flux live de votre activite"
+            />
+          </ChartBlock>
+          <ChartBlock tone="amber">
+            <HorizontalBarChartCard
+              formatter={(value) => formatCount(value)}
+              items={priorityPerformanceItems}
+              subtitle="Synthese immediate des 4 indicateurs les plus importants du dashboard agent."
+              title="Indicateurs prioritaires"
+            />
+          </ChartBlock>
         </div>
+        {/* Deuxieme ligne: lecture geographique et marche sous forme de comparaisons rapides. */}
         <div className="mt-8 grid grid-cols-1 gap-8 xl:grid-cols-2">
           <HorizontalBarChartCard
             formatter={(value) => `${formatCount(value)} annonces`}
@@ -1220,6 +1273,7 @@ function AgentDashboardContent({
   );
 }
 
+// Affiche l'evolution de plusieurs series sur 7 jours dans une seule carte.
 function LineChartCard({
   lines,
   points,
@@ -1359,105 +1413,7 @@ function LineChartCard({
   );
 }
 
-function DonutChartCard({
-  centerLabel,
-  centerValue,
-  items,
-  subtitle,
-  title,
-}: {
-  centerLabel: string;
-  centerValue: string;
-  items: { color: string; label: string; value: number }[];
-  subtitle: string;
-  title: string;
-}) {
-  const radius = 58;
-  const circumference = 2 * Math.PI * radius;
-  const total = items.reduce((sum, item) => sum + item.value, 0);
-  let offset = 0;
-
-  return (
-    <div className="rounded-2xl bg-white p-6 shadow-sm">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <SectionTitle subtitle={subtitle} title={title} />
-        <LiveBadge />
-      </div>
-      {total === 0 ? (
-        <div className="mt-6">
-          <EmptyBlock text="Aucune repartition exploitable n'est disponible pour ce graphique." />
-        </div>
-      ) : (
-        <div className="mt-6 grid grid-cols-1 gap-6 sm:grid-cols-[180px_minmax(0,1fr)] sm:items-center">
-          <div className="mx-auto">
-            <svg
-              aria-label={title}
-              className="h-[170px] w-[170px]"
-              role="img"
-              viewBox="0 0 160 160"
-            >
-              <circle cx="80" cy="80" fill="none" r={radius} stroke="#e5e7eb" strokeWidth="18" />
-              <g transform="rotate(-90 80 80)">
-                {items.map((item) => {
-                  const dashLength = (item.value / total) * circumference;
-                  const segment = (
-                    <circle
-                      cx="80"
-                      cy="80"
-                      fill="none"
-                      key={item.label}
-                      r={radius}
-                      stroke={item.color}
-                      strokeDasharray={`${dashLength} ${circumference - dashLength}`}
-                      strokeDashoffset={-offset}
-                      strokeWidth="18"
-                    />
-                  );
-                  offset += dashLength;
-                  return segment;
-                })}
-              </g>
-              <text
-                fill="#64748b"
-                fontSize="12"
-                textAnchor="middle"
-                x="80"
-                y="74"
-              >
-                {centerLabel}
-              </text>
-              <text
-                fill="#0f172a"
-                fontSize="20"
-                fontWeight="700"
-                textAnchor="middle"
-                x="80"
-                y="98"
-              >
-                {centerValue}
-              </text>
-            </svg>
-          </div>
-          <div className="space-y-3">
-            {items.map((item) => (
-              <div className="flex items-center justify-between gap-4 rounded-xl bg-surface-container-low px-4 py-3" key={item.label}>
-                <div className="flex items-center gap-3">
-                  <span
-                    className="h-3 w-3 rounded-full"
-                    style={{ backgroundColor: item.color }}
-                  />
-                  <span className="text-sm font-semibold text-primary">{item.label}</span>
-                </div>
-                <span className="text-sm font-bold text-secondary">{formatCount(item.value)}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
+// Compare plusieurs volumes sur une meme echelle horizontale.
 function HorizontalBarChartCard({
   formatter,
   items,
@@ -1507,6 +1463,21 @@ function HorizontalBarChartCard({
       </div>
     </div>
   );
+}
+
+function ChartBlock({
+  children,
+  tone,
+}: {
+  children: ReactNode;
+  tone: "amber" | "blue";
+}) {
+  const shellClassName =
+    tone === "blue"
+      ? "rounded-[28px] border border-[#d8e4ff] bg-[linear-gradient(180deg,#f7faff_0%,#eef4ff_100%)] p-3"
+      : "rounded-[28px] border border-[#f2dfb8] bg-[linear-gradient(180deg,#fffaf0_0%,#fff4de_100%)] p-3";
+
+  return <div className={shellClassName}>{children}</div>;
 }
 
 function LiveBadge() {

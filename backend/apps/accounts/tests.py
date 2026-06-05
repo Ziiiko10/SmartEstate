@@ -68,6 +68,11 @@ class AccountRoleTests(TestCase):
 
 @override_settings(PUBLIC_DEMO_ACCESS=True)
 class CurrentUserApiTests(TestCase):
+    AVATAR_IMAGE = (
+        "data:image/png;base64,"
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7+M1gAAAAASUVORK5CYII="
+    )
+
     def setUp(self):
         self.User = get_user_model()
         self.user = self.User.objects.create_user(
@@ -92,6 +97,7 @@ class CurrentUserApiTests(TestCase):
                 "email": "profil.maj@example.com",
                 "full_name": "Profil Mis a Jour",
                 "phone_number": "+212611223344",
+                "avatar_image": self.AVATAR_IMAGE,
             },
             content_type="application/json",
         )
@@ -101,11 +107,27 @@ class CurrentUserApiTests(TestCase):
         self.assertEqual(payload["email"], "profil.maj@example.com")
         self.assertEqual(payload["full_name"], "Profil Mis a Jour")
         self.assertEqual(payload["phone_number"], "+212611223344")
+        self.assertEqual(payload["avatar_image"], self.AVATAR_IMAGE)
 
         self.user.refresh_from_db()
         self.assertEqual(self.user.email, "profil.maj@example.com")
         self.assertEqual(self.user.full_name, "Profil Mis a Jour")
         self.assertEqual(self.user.phone_number, "+212611223344")
+        self.assertEqual(self.user.avatar_image, self.AVATAR_IMAGE)
+
+    def test_authenticated_user_rejects_invalid_avatar_payload(self):
+        self.client.force_login(self.user)
+
+        response = self.client.patch(
+            "/api/auth/me/",
+            data={
+                "avatar_image": "not-an-image",
+            },
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("avatar_image", response.json())
 
 
 @override_settings(PUBLIC_DEMO_ACCESS=False)

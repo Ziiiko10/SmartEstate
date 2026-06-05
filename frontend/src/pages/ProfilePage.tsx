@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { type ChangeEvent, useEffect, useRef, useState } from "react";
 import ImportedPageDocument from "../components/ImportedPageDocument";
+import UserAvatar from "../components/UserAvatar";
 import { useAuth } from "../auth/AuthContext";
 import { getErrorMessage } from "../lib/api";
 import { getRoleLabel, getRoleNavigation } from "../lib/roles";
@@ -13,9 +14,11 @@ const pageStyles = `.material-symbols-outlined {
 export default function ProfilePage() {
   const { token, updateProfile, user } = useAuth();
   const navigation = getRoleNavigation(user?.role);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [fullName, setFullName] = useState(user?.full_name ?? "");
   const [email, setEmail] = useState(user?.email ?? "");
   const [phoneNumber, setPhoneNumber] = useState(user?.phone_number ?? "");
+  const [avatarImage, setAvatarImage] = useState(user?.avatar_image ?? "");
   const [error, setError] = useState<null | string>(null);
   const [success, setSuccess] = useState<null | string>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -24,16 +27,19 @@ export default function ProfilePage() {
     setFullName(user?.full_name ?? "");
     setEmail(user?.email ?? "");
     setPhoneNumber(user?.phone_number ?? "");
-  }, [user?.email, user?.full_name, user?.phone_number]);
+    setAvatarImage(user?.avatar_image ?? "");
+  }, [user?.avatar_image, user?.email, user?.full_name, user?.phone_number]);
 
   const isDemoProfile = !token;
   const trimmedFullName = fullName.trim();
   const trimmedEmail = email.trim();
   const trimmedPhoneNumber = phoneNumber.trim();
+  const normalizedAvatarImage = avatarImage.trim();
   const hasChanges =
     trimmedFullName !== (user?.full_name ?? "") ||
     trimmedEmail !== (user?.email ?? "") ||
-    trimmedPhoneNumber !== (user?.phone_number ?? "");
+    trimmedPhoneNumber !== (user?.phone_number ?? "") ||
+    normalizedAvatarImage !== (user?.avatar_image ?? "");
 
   async function handleSave() {
     setError(null);
@@ -53,6 +59,7 @@ export default function ProfilePage() {
 
     try {
       await updateProfile({
+        avatar_image: normalizedAvatarImage,
         email: trimmedEmail,
         full_name: trimmedFullName,
         phone_number: trimmedPhoneNumber,
@@ -69,8 +76,57 @@ export default function ProfilePage() {
     setFullName(user?.full_name ?? "");
     setEmail(user?.email ?? "");
     setPhoneNumber(user?.phone_number ?? "");
+    setAvatarImage(user?.avatar_image ?? "");
     setError(null);
     setSuccess(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  }
+
+  function handleAvatarPickerClick() {
+    fileInputRef.current?.click();
+  }
+
+  function handleAvatarRemove() {
+    setAvatarImage("");
+    setError(null);
+    setSuccess(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  }
+
+  function handleAvatarChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+
+    if (!file) {
+      return;
+    }
+
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      setError("Utilisez une image JPG, PNG ou WebP pour la photo de profil.");
+      event.target.value = "";
+      return;
+    }
+
+    if (file.size > 2 * 1024 * 1024) {
+      setError("La photo de profil doit faire 2 Mo maximum.");
+      event.target.value = "";
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = typeof reader.result === "string" ? reader.result : "";
+      setAvatarImage(result);
+      setError(null);
+      setSuccess(null);
+    };
+    reader.onerror = () => {
+      setError("Impossible de lire cette image pour le moment.");
+    };
+    reader.readAsDataURL(file);
   }
 
   return (
@@ -95,8 +151,38 @@ export default function ProfilePage() {
         <section className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.5fr)_360px] gap-8">
           <div className="rounded-2xl bg-white p-6 md:p-8 shadow-sm">
             <div className="flex items-start gap-5">
-              <div className="flex h-20 w-20 items-center justify-center rounded-full bg-primary text-3xl font-headline font-extrabold text-white">
-                {user?.full_name?.slice(0, 1).toUpperCase() || "S"}
+              <div className="flex flex-col items-center gap-3">
+                <UserAvatar
+                  className="h-20 w-20 rounded-full object-cover text-3xl"
+                  fullName={fullName || user?.full_name}
+                  image={avatarImage}
+                />
+                <div className="flex flex-wrap justify-center gap-2">
+                  <input
+                    accept="image/jpeg,image/png,image/webp"
+                    className="hidden"
+                    disabled={isDemoProfile || isSubmitting}
+                    ref={fileInputRef}
+                    type="file"
+                    onChange={handleAvatarChange}
+                  />
+                  <button
+                    className="rounded-lg border border-outline-variant/20 bg-white px-3 py-2 text-xs font-bold text-primary transition hover:bg-surface-container-low disabled:cursor-not-allowed disabled:opacity-60"
+                    disabled={isDemoProfile || isSubmitting}
+                    type="button"
+                    onClick={handleAvatarPickerClick}
+                  >
+                    Choisir une image
+                  </button>
+                  <button
+                    className="rounded-lg border border-outline-variant/20 bg-white px-3 py-2 text-xs font-bold text-on-surface-variant transition hover:bg-surface-container-low disabled:cursor-not-allowed disabled:opacity-60"
+                    disabled={isDemoProfile || isSubmitting || !avatarImage}
+                    type="button"
+                    onClick={handleAvatarRemove}
+                  >
+                    Retirer
+                  </button>
+                </div>
               </div>
               <div>
                 <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-secondary">

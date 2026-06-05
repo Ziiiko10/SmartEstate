@@ -13,6 +13,7 @@ class UserSerializer(serializers.ModelSerializer):
             "email",
             "full_name",
             "phone_number",
+            "avatar_image",
             "role",
             "is_active",
             "created_at",
@@ -24,6 +25,7 @@ class CurrentUserUpdateSerializer(serializers.ModelSerializer):
     email = serializers.EmailField(required=False)
     full_name = serializers.CharField(required=False, allow_blank=False)
     phone_number = serializers.CharField(required=False, allow_blank=True, max_length=32)
+    avatar_image = serializers.CharField(required=False, allow_blank=True, trim_whitespace=False)
 
     class Meta:
         model = User
@@ -32,6 +34,7 @@ class CurrentUserUpdateSerializer(serializers.ModelSerializer):
             "email",
             "full_name",
             "phone_number",
+            "avatar_image",
             "role",
             "is_active",
             "created_at",
@@ -49,6 +52,24 @@ class CurrentUserUpdateSerializer(serializers.ModelSerializer):
 
     def validate_phone_number(self, value):
         return value.strip()
+
+    def validate_avatar_image(self, value):
+        cleaned = value.strip()
+
+        if not cleaned:
+            return ""
+
+        if len(cleaned) > 3_000_000:
+            raise serializers.ValidationError(
+                "L'image de profil est trop volumineuse. Utilisez une image de 2 Mo maximum."
+            )
+
+        if not cleaned.startswith("data:image/") or ";base64," not in cleaned:
+            raise serializers.ValidationError(
+                "Le format de l'image de profil est invalide."
+            )
+
+        return cleaned
 
 
 class RegisterSerializer(serializers.ModelSerializer):

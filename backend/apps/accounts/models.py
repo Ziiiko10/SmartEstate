@@ -42,6 +42,7 @@ class User(AbstractUser, TimestampedModel):
     email = models.EmailField(unique=True)
     full_name = models.CharField(max_length=255)
     phone_number = models.CharField(max_length=32, blank=True)
+    avatar_image = models.TextField(blank=True)
     role = models.CharField(
         max_length=32,
         choices=Role.choices,

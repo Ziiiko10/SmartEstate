@@ -15,6 +15,7 @@ const SESSION_STORAGE_TOKEN_KEY = "smartestate.auth.session-token";
 const PUBLIC_DEMO_ACCESS = import.meta.env.VITE_PUBLIC_DEMO_ACCESS?.toLowerCase() === "true";
 
 export type AuthUser = {
+  avatar_image: string;
   created_at: string;
   email: string;
   full_name: string;
@@ -44,6 +45,7 @@ type RegisterPayload = {
 };
 
 type UpdateProfilePayload = {
+  avatar_image: string;
   email: string;
   full_name: string;
   phone_number: string;
@@ -63,6 +65,7 @@ type AuthContextValue = {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 const DEMO_USER: AuthUser = {
+  avatar_image: "",
   created_at: new Date(0).toISOString(),
   email: "demo@smartestate.ma",
   full_name: "SmartEstate Demo",

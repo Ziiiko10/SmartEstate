@@ -3,6 +3,7 @@ import { useAuth } from "../auth/AuthContext";
 import { getHomeRouteForRole, getRoleLabel, getRoleNavigation, getRolePrimaryAction, USER_ROLES } from "../lib/roles";
 import { prefetchRoute } from "../lib/routePrefetch";
 import { APP_ROUTES } from "../lib/smartestateApp";
+import UserAvatar from "./UserAvatar";
 
 export default function DashboardSidebar() {
   const location = useLocation();
@@ -106,8 +107,17 @@ export default function DashboardSidebar() {
         ) : null}
 
         <div className="border-t border-outline-variant/10 px-6 py-5">
-          <p className="truncate text-sm font-bold text-primary">{user?.full_name}</p>
-          <p className="truncate text-xs text-on-surface-variant">{user?.email}</p>
+          <div className="flex items-center gap-3">
+            <UserAvatar
+              className="h-12 w-12 rounded-full object-cover text-lg"
+              fullName={user?.full_name}
+              image={user?.avatar_image}
+            />
+            <div className="min-w-0">
+              <p className="truncate text-sm font-bold text-primary">{user?.full_name}</p>
+              <p className="truncate text-xs text-on-surface-variant">{user?.email}</p>
+            </div>
+          </div>
           {!isSimpleUser ? (
             <button
               className="mt-4 w-full rounded-xl border border-outline-variant/20 px-4 py-3 text-sm font-semibold text-primary"

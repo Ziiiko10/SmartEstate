@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import MarketListingsMap from "../components/MarketListingsMap";
 import ImportedPageDocument from "../components/ImportedPageDocument";
 import { CardGridSkeleton, MetricCardsSkeleton, SkeletonBlock } from "../components/LoadingState";
 import { useAuth } from "../auth/AuthContext";
@@ -8,6 +9,8 @@ const pageStyles = `.material-symbols-outlined {
             font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
             vertical-align: middle;
         }`;
+
+const MAP_ITEMS_LIMIT = 120;
 
 type MarketListing = {
   area_sqm: string | null;
@@ -79,6 +82,30 @@ function buildListingsPath(params: {
   const searchParams = new URLSearchParams({
     page: String(params.page),
     page_size: String(ITEMS_PER_PAGE),
+  });
+
+  if (params.source !== "all") {
+    searchParams.set("source", params.source);
+  }
+  if (params.transaction !== "all") {
+    searchParams.set("transaction_type", params.transaction);
+  }
+  if (params.city) {
+    searchParams.set("city", params.city);
+  }
+  applySearchChoice(searchParams, params.searchChoice);
+
+  return `/market-listings/?${searchParams.toString()}`;
+}
+
+function buildMapListingsPath(params: {
+  city: string;
+  searchChoice: string;
+  source: string;
+  transaction: string;
+}) {
+  const searchParams = new URLSearchParams({
+    limit: String(MAP_ITEMS_LIMIT),
   });
 
   if (params.source !== "all") {
@@ -190,6 +217,7 @@ function getListingImages(listing: MarketListing) {
 export default function MarketListingsPage() {
   const { token } = useAuth();
   const [marketListings, setMarketListings] = useState<MarketListing[]>([]);
+  const [mapListings, setMapListings] = useState<MarketListing[]>([]);
   const [filterChoices, setFilterChoices] = useState<MarketListingFilters>({
     cities: [],
     search_choices: [],
@@ -201,7 +229,9 @@ export default function MarketListingsPage() {
   const [selectedTransaction, setSelectedTransaction] = useState("all");
   const [page, setPage] = useState(1);
   const [error, setError] = useState("");
+  const [mapError, setMapError] = useState("");
   const [isLoading, setIsLoading] = useState(true);
+  const [isMapLoading, setIsMapLoading] = useState(true);
 
   useEffect(() => {
     setPage(1);
@@ -248,6 +278,53 @@ export default function MarketListingsPage() {
     }
 
     void loadFilterChoices();
+    return () => {
+      active = false;
+    };
+  }, [selectedCity, selectedSearch, selectedSource, selectedTransaction, token]);
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadMapListings() {
+      setIsMapLoading(true);
+      setMapError("");
+
+      try {
+        const payload = await apiRequest<MarketListing[]>(
+          buildMapListingsPath({
+            city: selectedCity,
+            searchChoice: selectedSearch,
+            source: selectedSource,
+            transaction: selectedTransaction,
+          }),
+          { token },
+        );
+
+        if (!active) {
+          return;
+        }
+
+        setMapListings(payload);
+      } catch (requestError) {
+        if (!active) {
+          return;
+        }
+
+        setMapError(
+          getErrorMessage(
+            requestError,
+            "Impossible de charger la carte du marché pour le moment.",
+          ),
+        );
+      } finally {
+        if (active) {
+          setIsMapLoading(false);
+        }
+      }
+    }
+
+    void loadMapListings();
     return () => {
       active = false;
     };
@@ -326,6 +403,8 @@ export default function MarketListingsPage() {
   const totalPages = Math.max(1, Math.ceil(totalCount / ITEMS_PER_PAGE));
   const currentPage = Math.min(page, totalPages);
   const isInitialLoading = isLoading && totalCount === 0 && marketListings.length === 0 && !error;
+  const displayedMapListings = mapListings.length > 0 ? mapListings : marketListings;
+  const isMapUsingFallback = mapListings.length === 0 && marketListings.length > 0;
 
   return (
     <ImportedPageDocument
@@ -362,7 +441,7 @@ export default function MarketListingsPage() {
             <MetricCard label="Annonces filtrées" value={String(totalCount)} />
             <MetricCard label="Page courante" value={`${currentPage} / ${totalPages}`} />
             <MetricCard label="Sources actives" value={selectedSource === "all" ? "2" : "1"} />
-            <MetricCard label="Cartes chargées" value={String(marketListings.length)} />
+            <MetricCard label="Annonces cartographiées" value={String(displayedMapListings.length)} />
           </section>
         )}
 
@@ -448,6 +527,14 @@ export default function MarketListingsPage() {
             </div>
           </section>
         )}
+
+        <MarketListingsMap
+          error={mapError}
+          isFallbackData={isMapUsingFallback}
+          isLoading={isInitialLoading || (isMapLoading && displayedMapListings.length === 0)}
+          listings={displayedMapListings}
+          selectedCity={selectedCity}
+        />
 
         {isInitialLoading ? (
           <CardGridSkeleton count={6} />
