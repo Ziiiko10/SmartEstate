@@ -130,10 +130,12 @@ body {
 }
 
 @media (min-width: 768px) {
+  .smartestate-dashboard-content-with-header,
   .smartestate-dashboard-content-user {
     padding-top: 4rem;
   }
 
+  .smartestate-dashboard-content-with-header main,
   .smartestate-dashboard-content-user main {
     padding-top: 0 !important;
   }

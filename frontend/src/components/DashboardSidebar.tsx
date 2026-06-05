@@ -19,6 +19,9 @@ export default function DashboardSidebar() {
   const primaryAction = getRolePrimaryAction(user?.role);
   const homeRoute = getHomeRouteForRole(user?.role);
   const isSimpleUser = user?.role === USER_ROLES.UTILISATEUR_SIMPLE;
+  const isAgentUser = user?.role === USER_ROLES.AGENT_IMMOBILIER;
+  const hasHeaderLogoutButton = isSimpleUser || (isAgentUser && location.pathname !== APP_ROUTES.agentDashboard);
+  const showFooterLogoutButton = user?.role === USER_ROLES.ADMINISTRATEUR;
 
   function handleLogout() {
     // Deconnecte l'utilisateur puis le renvoie vers l'accueil public.
@@ -49,7 +52,7 @@ export default function DashboardSidebar() {
 
   return (
     <>
-      {isSimpleUser ? (
+      {hasHeaderLogoutButton ? (
         <header className="hidden md:flex fixed left-72 right-0 top-0 z-[65] h-16 items-center justify-end bg-[#f9f9fb] px-6">
           <button
             className="inline-flex items-center gap-2 rounded-lg border border-outline-variant/20 bg-white px-4 py-2 text-sm font-semibold text-primary transition-colors hover:bg-surface-container-low"
@@ -102,7 +105,7 @@ export default function DashboardSidebar() {
           })}
         </nav>
 
-        {!isSimpleUser ? (
+        {!hasHeaderLogoutButton && primaryAction ? (
           <div className="px-6 pb-4">
             <Link
               className="w-full rounded-xl bg-primary px-4 py-3 text-sm font-bold text-white flex items-center justify-center gap-2"
@@ -127,11 +130,11 @@ export default function DashboardSidebar() {
               <p className="truncate text-xs text-on-surface-variant">{user?.email}</p>
             </div>
           </div>
-          {!isSimpleUser ? (
-            <button
-              className="mt-4 w-full rounded-xl border border-outline-variant/20 px-4 py-3 text-sm font-semibold text-primary"
-              type="button"
-              onClick={handleLogout}
+        {showFooterLogoutButton ? (
+          <button
+            className="mt-4 w-full rounded-xl border border-outline-variant/20 px-4 py-3 text-sm font-semibold text-primary"
+            type="button"
+            onClick={handleLogout}
             >
               Déconnexion
             </button>
@@ -148,7 +151,7 @@ export default function DashboardSidebar() {
           >
             SmartEstate
           </Link>
-          {isSimpleUser ? (
+          {hasHeaderLogoutButton ? (
             <button
               aria-label="Déconnexion"
               className="flex h-10 w-10 items-center justify-center rounded-full bg-secondary text-white"
@@ -157,7 +160,7 @@ export default function DashboardSidebar() {
             >
               <span className="material-symbols-outlined text-xl">logout</span>
             </button>
-          ) : (
+          ) : primaryAction ? (
             <Link
               aria-label={primaryAction.label}
               className="w-10 h-10 rounded-full bg-secondary text-white flex items-center justify-center"
@@ -166,6 +169,8 @@ export default function DashboardSidebar() {
             >
               <span className="material-symbols-outlined text-xl">{primaryAction.icon}</span>
             </Link>
+          ) : (
+            <div className="h-10 w-10" aria-hidden="true" />
           )}
         </div>
         <nav className="flex gap-1 overflow-x-auto px-3 pb-2" aria-label="Navigation mobile">

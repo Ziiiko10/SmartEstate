@@ -3,13 +3,11 @@ import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   ChartBlock,
-  DataRow,
   EmptyBlock,
   HorizontalBarChartCard,
   LegendPill,
   LineChartCard,
   LiveBadge,
-  ListPanel,
   MetricCard,
   QuickActionButton,
   SectionTitle,
@@ -314,18 +312,6 @@ function formatPercent(value: number | null | undefined) {
 // Affiche les compteurs entiers avec la locale marocaine.
 function formatCount(value: number | null | undefined) {
   return Number(value ?? 0).toLocaleString("fr-MA");
-}
-
-// Formate une metrique nullable avec un suffixe optionnel.
-function formatNullableMetric(value: number | null | undefined, suffix = "") {
-  if (value === null || value === undefined) {
-    return "Non disponible";
-  }
-
-  return `${Number(value).toLocaleString("fr-MA", {
-    maximumFractionDigits: 2,
-    minimumFractionDigits: 0,
-  })}${suffix}`;
 }
 
 // Rend les horodatages backend lisibles dans l'interface de pilotage.
@@ -634,14 +620,12 @@ function AdminDashboardContent({
             <QuickActionButton label="Gerer les utilisateurs" onClick={() => navigate(APP_ROUTES.adminUsers)} />
             <QuickActionButton label="Gerer les agents" onClick={() => navigate(APP_ROUTES.adminAgents)} />
             <QuickActionButton label="Gerer les annonces" onClick={() => navigate(APP_ROUTES.adminListings)} />
-            <QuickActionButton label="Gerer les villes et quartiers" onClick={() => navigate(APP_ROUTES.adminLocations)} />
-            <QuickActionButton label="Gerer les donnees immobilieres" onClick={() => navigate(APP_ROUTES.adminData)} />
             <QuickActionButton label="Gerer le modele ML" onClick={() => navigate(APP_ROUTES.adminModel)} />
           </div>
         </div>
       </section>
 
-      <section className="grid grid-cols-1 gap-8 xl:grid-cols-2">
+      <section className="grid grid-cols-1 gap-8">
         <div className="rounded-2xl bg-white p-6 shadow-sm">
           <SectionTitle subtitle="Annonces internes actuellement en statut attente." title="Annonces a valider" />
           <div className="mt-6 overflow-x-auto">
@@ -695,175 +679,28 @@ function AdminDashboardContent({
             )}
           </div>
         </div>
-
-        <div className="rounded-2xl bg-white p-6 shadow-sm">
-          <SectionTitle subtitle="Nouveaux agents demandant l'acces a la plateforme." title="Agents en attente de validation" />
-          <div className="mt-6 overflow-x-auto">
-            {dashboard.pending_agents.length === 0 ? (
-              <EmptyBlock text="Aucun agent n'est actuellement en attente de validation." />
-            ) : (
-              <table className="w-full min-w-[720px] border-collapse text-left">
-                <thead>
-                  <tr className="border-b border-outline-variant/20 text-[11px] uppercase tracking-widest text-on-surface-variant">
-                    <th className="px-3 py-3 font-bold">Agent</th>
-                    <th className="px-3 py-3 font-bold">Agence</th>
-                    <th className="px-3 py-3 font-bold">Ville</th>
-                    <th className="px-3 py-3 font-bold">Telephone</th>
-                    <th className="px-3 py-3 font-bold">Statut</th>
-                    <th className="px-3 py-3 font-bold">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {dashboard.pending_agents.map((agent) => (
-                    <tr className="border-b border-outline-variant/10" key={agent.id}>
-                      <td className="px-3 py-4">
-                        <p className="font-semibold text-primary">{agent.full_name}</p>
-                        <p className="mt-1 text-xs text-on-surface-variant">{agent.email}</p>
-                      </td>
-                      <td className="px-3 py-4">{agent.agency_name}</td>
-                      <td className="px-3 py-4">{agent.city || "N/A"}</td>
-                      <td className="px-3 py-4">{agent.phone_number || "N/A"}</td>
-                      <td className="px-3 py-4">
-                        <StatusBadge label={agent.status} tone="warning" />
-                      </td>
-                      <td className="px-3 py-4">
-                        <div className="flex flex-wrap gap-2">
-                          <TableActionButton
-                            label="Valider"
-                            onClick={() => navigate(APP_ROUTES.adminAgents)}
-                            tone="primary"
-                          />
-                          <TableActionButton
-                            label="Refuser"
-                            onClick={() => navigate(APP_ROUTES.adminAgents)}
-                            tone="danger"
-                          />
-                          <TableActionButton
-                            label="Consulter le profil"
-                            onClick={() => navigate(APP_ROUTES.adminAgents)}
-                            tone="ghost"
-                          />
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
-        </div>
       </section>
 
-      <section className="grid grid-cols-1 gap-8 xl:grid-cols-[minmax(0,1.2fr)_380px]">
+      <section className="grid grid-cols-1 gap-8">
         <div className="rounded-2xl bg-white p-6 shadow-sm">
-          <SectionTitle subtitle="Indicateurs generaux sur le marche dans l'application." title="Statistiques du marche immobilier" />
-          {!dashboard.tracked_market_engagement && dashboard.market_signal_note ? (
-            <p className="mt-4 rounded-xl bg-surface-container-low px-4 py-4 text-sm text-on-surface-variant">
-              {dashboard.market_signal_note}
-            </p>
-          ) : null}
-          <div className="mt-6 grid grid-cols-1 gap-5 md:grid-cols-2">
-            <InfoCard
-              label="Ville la plus recherchee"
-              value={dashboard.top_market_city?.city || "Non disponible"}
-              secondary={
-                dashboard.top_market_city
-                  ? dashboard.tracked_market_engagement
-                    ? `${dashboard.top_market_city.listing_count ?? 0} recherches`
-                    : `Proxy ETL: ${dashboard.top_market_city.listing_count ?? 0} annonces`
-                  : "En attente des donnees ETL"
-              }
-            />
-            <InfoCard
-              label="Quartier le plus consulte"
-              value={dashboard.top_market_district?.district || "Non disponible"}
-              secondary={
-                dashboard.top_market_district
-                  ? dashboard.tracked_market_engagement
-                    ? `${dashboard.top_market_district.listing_count} consultations`
-                    : `Proxy ETL: ${dashboard.top_market_district.listing_count} annonces`
-                  : "En attente des donnees ETL"
-              }
-            />
-            <InfoCard
-              label="Type de bien le plus demande"
-              value={dashboard.top_market_asset_type?.label || "Non disponible"}
-              secondary={
-                dashboard.top_market_asset_type
-                  ? dashboard.tracked_market_engagement
-                    ? `${dashboard.top_market_asset_type.count} demandes`
-                    : `Proxy ETL: ${dashboard.top_market_asset_type.count} annonces`
-                  : "En attente des donnees ETL"
-              }
-            />
-            <InfoCard
-              label="Prix moyen global"
-              value={formatMoney(dashboard.average_market_price_per_sqm, false)}
-              secondary="DH / m² observe sur les ventes"
-            />
-          </div>
-
-          <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-2">
-            <ListPanel
-              items={dashboard.market_cities.map((city) => ({
-                label: city.city,
-                secondary: city.average_price
-                  ? `Prix moyen: ${formatMoney(Number(city.average_price), false)}`
-                  : "Prix moyen indisponible",
-                value: `${city.listing_count ?? 0} annonces`,
-              }))}
-              title="Prix moyen par ville"
-            />
-            <ListPanel
-              items={dashboard.valuations_by_city.map((city) => ({
-                label: city.city,
-                secondary: "Estimations enregistrees",
-                value: `${city.count}`,
-              }))}
-              title="Nombre d'estimations par ville"
-            />
-          </div>
-        </div>
-
-        <div className="space-y-8">
-          <div className="rounded-2xl bg-white p-6 shadow-sm">
-            <SectionTitle subtitle="Etat courant de la couche ML exploitee par la plateforme." title="Etat du modele Machine Learning" />
-            <div className="mt-6 space-y-4">
-              <DataRow label="Modele utilise" value={dashboard.model_state.model_name || "Non disponible"} />
-              <DataRow label="Dernier entrainement" value={formatDate(dashboard.model_state.last_training_at)} />
-              <DataRow label="Donnees utilisees" value={dashboard.model_state.dataset_size.toLocaleString("fr-MA")} />
-              <DataRow label="Score R²" value={formatNullableMetric(dashboard.model_state.r2_score)} />
-              <DataRow label="MAE" value={dashboard.model_state.mae === null ? "Non disponible" : formatMoney(dashboard.model_state.mae, false)} />
-              <DataRow label="RMSE" value={dashboard.model_state.rmse === null ? "Non disponible" : formatMoney(dashboard.model_state.rmse, false)} />
-              <DataRow label="Statut" value={dashboard.model_state.status_label} />
-            </div>
-            {dashboard.model_state.tracking_note ? (
-              <p className="mt-5 text-xs leading-relaxed text-on-surface-variant">
-                {dashboard.model_state.tracking_note}
-              </p>
-            ) : null}
-          </div>
-
-          <div className="rounded-2xl bg-white p-6 shadow-sm">
-            <SectionTitle subtitle="Problemes a traiter rapidement par l'administration." title="Alertes ou problemes" />
-            <div className="mt-6 space-y-4">
-              {dashboard.alerts.length === 0 ? (
-                <EmptyBlock text="Aucune alerte critique detectee." />
-              ) : (
-                dashboard.alerts.map((alert) => (
-                  <div className="rounded-xl bg-surface-container-low px-4 py-4" key={alert.id}>
-                    <div className="flex items-center justify-between gap-4">
-                      <p className="font-semibold text-primary">{alert.title}</p>
-                      <StatusBadge
-                        label={alert.count.toLocaleString("fr-MA")}
-                        tone={alert.severity === "warning" ? "warning" : "success"}
-                      />
-                    </div>
-                    <p className="mt-2 text-sm text-on-surface-variant">{alert.description}</p>
+          <SectionTitle subtitle="Problemes a traiter rapidement par l'administration." title="Alertes ou problemes" />
+          <div className="mt-6 space-y-4">
+            {dashboard.alerts.length === 0 ? (
+              <EmptyBlock text="Aucune alerte critique detectee." />
+            ) : (
+              dashboard.alerts.map((alert) => (
+                <div className="rounded-xl bg-surface-container-low px-4 py-4" key={alert.id}>
+                  <div className="flex items-center justify-between gap-4">
+                    <p className="font-semibold text-primary">{alert.title}</p>
+                    <StatusBadge
+                      label={alert.count.toLocaleString("fr-MA")}
+                      tone={alert.severity === "warning" ? "warning" : "success"}
+                    />
                   </div>
-                ))
-              )}
-            </div>
+                  <p className="mt-2 text-sm text-on-surface-variant">{alert.description}</p>
+                </div>
+              ))
+            )}
           </div>
         </div>
       </section>
@@ -1232,7 +1069,6 @@ function AgentDashboardContent({
             title="Acces rapides"
           />
           <div className="mt-6 grid grid-cols-1 gap-3">
-            <QuickActionButton label="Ajouter une annonce" onClick={() => navigate(APP_ROUTES.agentNewListing)} />
             <QuickActionButton label="Voir mes annonces" onClick={() => navigate(APP_ROUTES.agentListings)} />
             <QuickActionButton label="Estimer un bien" onClick={() => navigate(APP_ROUTES.agentEstimation)} />
             <QuickActionButton label="Voir les demandes clients" onClick={() => navigate(APP_ROUTES.agentRequests)} />

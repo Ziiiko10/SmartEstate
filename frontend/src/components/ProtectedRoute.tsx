@@ -4,6 +4,7 @@ import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { getHomeRouteForRole, getRoleNavigation, isAllowedRole, type UserRole, USER_ROLES } from "../lib/roles";
 import { authenticatedWorkspacePrefetchRoutes, prefetchRoute } from "../lib/routePrefetch";
+import { APP_ROUTES } from "../lib/smartestateApp";
 import DashboardSidebar from "./DashboardSidebar";
 import { AppLoadingScreen } from "./LoadingState";
 
@@ -51,10 +52,12 @@ export default function ProtectedRoute({ allowedRoles, children }: ProtectedRout
     return <Navigate replace to={getHomeRouteForRole(user?.role)} />;
   }
 
-  const contentClassName =
-    user?.role === USER_ROLES.UTILISATEUR_SIMPLE
-      ? "smartestate-dashboard-content smartestate-dashboard-content-user"
-      : "smartestate-dashboard-content";
+  const usesHeaderLogoutLayout =
+    user?.role === USER_ROLES.UTILISATEUR_SIMPLE ||
+    (user?.role === USER_ROLES.AGENT_IMMOBILIER && location.pathname !== APP_ROUTES.agentDashboard);
+  const contentClassName = usesHeaderLogoutLayout
+    ? "smartestate-dashboard-content smartestate-dashboard-content-with-header"
+    : "smartestate-dashboard-content";
 
   return (
     <div className="smartestate-dashboard-shell">

@@ -7,11 +7,8 @@ import { AppLoadingScreen, RouteTransitionOverlay } from "./components/LoadingSt
 import ProtectedRoute from "./components/ProtectedRoute";
 import {
   LazyAdminAgentsPage,
-  LazyAdminDataPage,
   LazyAdminListingsPage,
-  LazyAdminLocationsPage,
   LazyAdminMlModelPage,
-  LazyAdminSettingsPage,
   LazyAdminUsersPage,
   LazyAgentClientRequestsPage,
   LazyAgentListingCreatePage,
@@ -225,7 +222,7 @@ export default function App() {
             path={APP_ROUTES.adminLocations}
             element={
               <ProtectedRoute allowedRoles={[USER_ROLES.ADMINISTRATEUR]}>
-                <LazyAdminLocationsPage />
+                <Navigate replace to={APP_ROUTES.adminDashboard} />
               </ProtectedRoute>
             }
           />
@@ -233,7 +230,7 @@ export default function App() {
             path={APP_ROUTES.adminData}
             element={
               <ProtectedRoute allowedRoles={[USER_ROLES.ADMINISTRATEUR]}>
-                <LazyAdminDataPage />
+                <Navigate replace to={APP_ROUTES.adminDashboard} />
               </ProtectedRoute>
             }
           />
@@ -257,7 +254,7 @@ export default function App() {
             path={APP_ROUTES.adminSettings}
             element={
               <ProtectedRoute allowedRoles={[USER_ROLES.ADMINISTRATEUR]}>
-                <LazyAdminSettingsPage />
+                <Navigate replace to={APP_ROUTES.adminDashboard} />
               </ProtectedRoute>
             }
           />

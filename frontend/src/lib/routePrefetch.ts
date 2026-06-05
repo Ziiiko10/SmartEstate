@@ -27,11 +27,8 @@ function lazyWithPreload<T extends ComponentType<any>>(
 
 const pageLoaders = {
   adminAgents: () => import("../pages/AdminAgentsPage"),
-  adminData: () => import("../pages/AdminDataPage"),
   adminListings: () => import("../pages/AdminListingsPage"),
-  adminLocations: () => import("../pages/AdminLocationsPage"),
   adminMlModel: () => import("../pages/AdminMlModelPage"),
-  adminSettings: () => import("../pages/AdminSettingsPage"),
   adminUsers: () => import("../pages/AdminUsersPage"),
   agentClientRequests: () => import("../pages/AgentClientRequestsPage"),
   agentListingCreate: () => import("../pages/AgentListingCreatePage"),
@@ -50,11 +47,8 @@ const pageLoaders = {
 };
 
 export const LazyAdminAgentsPage = lazyWithPreload(pageLoaders.adminAgents);
-export const LazyAdminDataPage = lazyWithPreload(pageLoaders.adminData);
 export const LazyAdminListingsPage = lazyWithPreload(pageLoaders.adminListings);
-export const LazyAdminLocationsPage = lazyWithPreload(pageLoaders.adminLocations);
 export const LazyAdminMlModelPage = lazyWithPreload(pageLoaders.adminMlModel);
-export const LazyAdminSettingsPage = lazyWithPreload(pageLoaders.adminSettings);
 export const LazyAdminUsersPage = lazyWithPreload(pageLoaders.adminUsers);
 export const LazyAgentClientRequestsPage = lazyWithPreload(pageLoaders.agentClientRequests);
 export const LazyAgentListingCreatePage = lazyWithPreload(pageLoaders.agentListingCreate);
@@ -89,10 +83,7 @@ const routeDefinitions = [
   { path: APP_ROUTES.adminUsers, preload: LazyAdminUsersPage.preload },
   { path: APP_ROUTES.adminAgents, preload: LazyAdminAgentsPage.preload },
   { path: APP_ROUTES.adminListings, preload: LazyAdminListingsPage.preload },
-  { path: APP_ROUTES.adminLocations, preload: LazyAdminLocationsPage.preload },
-  { path: APP_ROUTES.adminData, preload: LazyAdminDataPage.preload },
   { path: APP_ROUTES.adminModel, preload: LazyAdminMlModelPage.preload },
-  { path: APP_ROUTES.adminSettings, preload: LazyAdminSettingsPage.preload },
   { path: APP_ROUTES.login, preload: LazyLoginPage.preload },
   { path: APP_ROUTES.signup, preload: LazySignupPage.preload },
   { path: APP_ROUTES.catalog, preload: LazyPageCatalogPage.preload },
@@ -165,7 +156,6 @@ async function prefetchRouteData(path: string, token?: null | string) {
       return;
     case APP_ROUTES.marketListings:
     case APP_ROUTES.adminListings:
-    case APP_ROUTES.adminData:
       await Promise.allSettled([
         apiPrefetch("/market-listings/filters/", { token }),
         apiPrefetch("/market-listings/?page=1&page_size=12", { token }),
